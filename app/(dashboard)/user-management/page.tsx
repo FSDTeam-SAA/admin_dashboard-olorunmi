@@ -404,7 +404,7 @@ function PasswordInfoCard({ value }: { value: string }) {
 
   return (
     <div>
-      <Label className="mb-1.5 block text-xs text-[#5f5f5f]    ">Password</Label>
+      <Label className="mb-1.5 block text-xs text-[#5f5f5f]">Password</Label>
       <div className="flex h-11 items-center gap-2 rounded-xl bg-[#e7e7e7] px-3 text-sm font-medium text-[#2f2f2f]">
         <Lock className="size-4 shrink-0 text-[#6f6f6f]" />
         <span className="flex-1 truncate font-mono tracking-wider">

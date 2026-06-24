@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ComponentProps } from "react";
-import { Eye, EyeOff, IdCard, Lock, Plus, User, type LucideIcon } from "lucide-react";
+import { IdCard, Lock, Plus, User, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -43,12 +43,11 @@ export function UserFormDialog({
 }: UserFormDialogProps) {
   const [name, setName] = useState(initialValues?.name ?? "");
   const [userId, setUserId] = useState(initialValues?.userId ?? "");
-  const [password, setPassword] = useState(initialValues?.textPassword ?? "");
+  const [password, setPassword] = useState("");
   const [latitude, setLatitude] = useState(String(initialValues?.location?.latitude ?? DEFAULT_LATITUDE));
   const [longitude, setLongitude] = useState(String(initialValues?.location?.longitude ?? DEFAULT_LONGITUDE));
   const [defaultRadius, setDefaultRadius] = useState(String(initialValues?.defaultRadius ?? 100));
   const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
 
   const previewUrl = useMemo(() => {
     if (!profilePhoto) {
@@ -78,13 +77,13 @@ export function UserFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto max-w-240! rounded-2xl p-6">
+      <DialogContent className="!max-w-[460px] rounded-2xl p-5">
         <DialogHeader>
           <DialogTitle>{initialValues ? "Update user" : "Add New user"}</DialogTitle>
         </DialogHeader>
 
         <form
-          className="space-y-5"
+          className="space-y-3"
           onSubmit={(event) => {
             event.preventDefault();
 
@@ -124,69 +123,57 @@ export function UserFormDialog({
             onPick={setProfilePhoto}
           />
 
-          <div className="grid gap-5 md:grid-cols-2">
-            <div className="space-y-3">
-              <IconInput
-                icon={User}
-                placeholder="Enter User Name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                required
-              />
+          <IconInput
+            icon={User}
+            placeholder="Enter User Name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            required
+          />
 
-              <IconInput
-                icon={IdCard}
-                placeholder="User ID"
-                value={userId}
-                onChange={(event) => setUserId(event.target.value)}
-                required
-              />
+          <IconInput
+            icon={IdCard}
+            placeholder="User ID"
+            value={userId}
+            onChange={(event) => setUserId(event.target.value)}
+            required
+          />
 
-              <PasswordInput
-                placeholder="Password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-                visible={showPassword}
-                onToggleVisible={() => setShowPassword((previous) => !previous)}
-              />
+          <IconInput
+            icon={Lock}
+            type="password"
+            placeholder={initialValues ? "New Password (optional)" : "Password"}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required={!initialValues}
+          />
 
-              <CoordinatesInput
-                latitude={latitude}
-                longitude={longitude}
-                onLatitudeChange={setLatitude}
-                onLongitudeChange={setLongitude}
-              />
+          <CoordinatesInput
+            latitude={latitude}
+            longitude={longitude}
+            onLatitudeChange={setLatitude}
+            onLongitudeChange={setLongitude}
+          />
 
-              <div>
-                <Input
-                  placeholder="Default Radius (meters)"
-                  value={defaultRadius}
-                  onChange={(event) => setDefaultRadius(event.target.value)}
-                  required
-                />
-                <p className="mt-1 text-xs text-[#6f6f6f]">
-                  Allowed check-in distance from the location, in meters.
-                </p>
-              </div>
-            </div>
+          <Input
+            placeholder="Default Radius"
+            value={defaultRadius}
+            onChange={(event) => setDefaultRadius(event.target.value)}
+            required
+          />
 
-            <div className="space-y-2">
-              <OpenStreetMapPicker
-                latitude={parsedLatitude}
-                longitude={parsedLongitude}
-                onChange={(nextLatitude, nextLongitude) => {
-                  setLatitude(nextLatitude.toFixed(6));
-                  setLongitude(nextLongitude.toFixed(6));
-                }}
-                heightClassName="h-[380px]"
-              />
-              <p className="text-xs text-[#6f6f6f]">
-                Search a place, use &ldquo;Locate me&rdquo;, or click/drag the
-                marker on the map to set the user&apos;s location.
-              </p>
-            </div>
-          </div>
+          <OpenStreetMapPicker
+            latitude={parsedLatitude}
+            longitude={parsedLongitude}
+            onChange={(nextLatitude, nextLongitude) => {
+              setLatitude(nextLatitude.toFixed(6));
+              setLongitude(nextLongitude.toFixed(6));
+            }}
+          />
+
+          <p className="text-xs text-[#6f6f6f]">
+            Click or drag the marker to set the user&apos;s location.
+          </p>
 
           <Button type="submit" className="h-11 w-full" disabled={loading}>
             <Plus className="size-4" />
@@ -286,35 +273,6 @@ function IconInput({
     <div className="relative">
       <Icon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#9a9a9a]" />
       <Input className={`pl-9 ${className ?? ""}`} {...props} />
-    </div>
-  );
-}
-
-function PasswordInput({
-  visible,
-  onToggleVisible,
-  className,
-  ...props
-}: Omit<ComponentProps<typeof Input>, "type"> & {
-  visible: boolean;
-  onToggleVisible: () => void;
-}) {
-  return (
-    <div className="relative">
-      <Lock className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#9a9a9a]" />
-      <Input
-        type={visible ? "text" : "password"}
-        className={`pr-10 pl-9 ${className ?? ""}`}
-        {...props}
-      />
-      <button
-        type="button"
-        aria-label={visible ? "Hide password" : "Show password"}
-        className="absolute top-1/2 right-3 -translate-y-1/2 text-[#9a9a9a] hover:text-[#1f1f1f]"
-        onClick={onToggleVisible}
-      >
-        {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-      </button>
     </div>
   );
 }
