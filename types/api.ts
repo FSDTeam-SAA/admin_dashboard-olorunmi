@@ -72,7 +72,12 @@ export type ChecklistItem = {
   checkInAt: string;
   checkOutAt?: string;
   checkOutType?: "manual" | "auto";
-  status: "checked_in" | "checked_out";
+  status:
+    | "checked_in"
+    | "checked_out"
+    | "checked_in_missed"
+    | "user_outside_radius"
+    | "re_checked_in";
   alertStatus?: "pending" | "sent";
   alertSentAt?: string | null;
   checkInLocation: {

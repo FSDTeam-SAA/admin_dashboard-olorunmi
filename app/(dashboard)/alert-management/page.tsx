@@ -41,6 +41,20 @@ import type { ChecklistItem } from "@/types/api";
 
 const PAGE_LIMIT = 8;
 
+const alertStatusDisplay: Record<
+  ChecklistItem["status"],
+  { label: string; variant: "danger" | "success" | "warning" }
+> = {
+  checked_in: { label: "Book In", variant: "success" },
+  checked_out: { label: "Book Off", variant: "danger" },
+  checked_in_missed: { label: "Missed Check-In", variant: "warning" },
+  user_outside_radius: { label: "Check-In: NOT OK", variant: "danger" },
+  re_checked_in: { label: "Check-In: OK", variant: "success" },
+};
+
+const getAlertStatusDisplay = (status: ChecklistItem["status"]) =>
+  alertStatusDisplay[status] ?? { label: status, variant: "danger" as const };
+
 // Matches the backend workDate format (new Date().toISOString().slice(0, 10)).
 const getTodayDate = () => new Date().toISOString().slice(0, 10);
 
@@ -165,11 +179,13 @@ export default function AlertManagementPage() {
                         : formatDateTimeLabel(alert.checkInAt)}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="danger">{alert.status}</Badge>
+                      <Badge variant={getAlertStatusDisplay(alert.status).variant}>
+                        {getAlertStatusDisplay(alert.status).label}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Button
+                        {/* <Button
                           size="sm"
                           className="h-9 rounded-lg bg-[#ffa800] px-3 text-white hover:bg-[#ea9800]"
                           disabled={alert.alertStatus === "sent"}
@@ -180,7 +196,7 @@ export default function AlertManagementPage() {
                         >
                           <AlertTriangle className="size-4" />
                           {alert.alertStatus === "sent" ? "Alert Sent" : "Send alert"}
-                        </Button>
+                        </Button> */}
 
                         <Button
                           variant="secondary"
@@ -339,8 +355,8 @@ export default function AlertManagementPage() {
                   {checklistsQuery.data?.map((item) => (
                     <div key={item._id} className="rounded-xl border border-[#e4e4e4] p-3">
                       <div className="mb-2 flex items-center justify-between">
-                        <Badge>
-                          {item.status}
+                        <Badge variant={getAlertStatusDisplay(item.status).variant}>
+                          {getAlertStatusDisplay(item.status).label}
                         </Badge>
                         <span className="text-xs text-[#696969]">{item.workDate}</span>
                       </div>
