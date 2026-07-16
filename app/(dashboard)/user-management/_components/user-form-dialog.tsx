@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ComponentProps } from "react";
-import { IdCard, Lock, Plus, User, type LucideIcon } from "lucide-react";
+import {
+  Building2,
+  Clock,
+  IdCard,
+  Lock,
+  Plus,
+  User,
+  type LucideIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -20,6 +28,9 @@ export type UserFormPayload = {
   name: string;
   userId: string;
   password: string;
+  site: string;
+  onShift: string;
+  offShift: string;
   latitude: number;
   longitude: number;
   defaultRadius: number;
@@ -44,6 +55,9 @@ export function UserFormDialog({
   const [name, setName] = useState(initialValues?.name ?? "");
   const [userId, setUserId] = useState(initialValues?.userId ?? "");
   const [password, setPassword] = useState("");
+  const [site, setSite] = useState(initialValues?.site ?? "");
+  const [onShift, setOnShift] = useState(initialValues?.onShift ?? "");
+  const [offShift, setOffShift] = useState(initialValues?.offShift ?? "");
   const [latitude, setLatitude] = useState(String(initialValues?.location?.latitude ?? DEFAULT_LATITUDE));
   const [longitude, setLongitude] = useState(String(initialValues?.location?.longitude ?? DEFAULT_LONGITUDE));
   const [defaultRadius, setDefaultRadius] = useState(String(initialValues?.defaultRadius ?? 100));
@@ -77,7 +91,7 @@ export function UserFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!max-w-[460px] rounded-2xl p-5">
+      <DialogContent className="max-h-[92vh] !max-w-[680px] overflow-y-auto rounded-2xl p-5">
         <DialogHeader>
           <DialogTitle>{initialValues ? "Update user" : "Add New user"}</DialogTitle>
         </DialogHeader>
@@ -110,6 +124,9 @@ export function UserFormDialog({
               name,
               userId,
               password,
+              site,
+              onShift,
+              offShift,
               latitude: latitudeValue,
               longitude: longitudeValue,
               defaultRadius: Number.isNaN(parsedRadius) ? 100 : parsedRadius,
@@ -147,6 +164,32 @@ export function UserFormDialog({
             onChange={(event) => setPassword(event.target.value)}
             required={!initialValues}
           />
+
+          <IconInput
+            icon={Building2}
+            placeholder="Site"
+            value={site}
+            onChange={(event) => setSite(event.target.value)}
+          />
+
+          <div className="grid grid-cols-2 gap-2">
+            <IconInput
+              icon={Clock}
+              type="time"
+              aria-label="On Shift"
+              title="On Shift"
+              value={onShift}
+              onChange={(event) => setOnShift(event.target.value)}
+            />
+            <IconInput
+              icon={Clock}
+              type="time"
+              aria-label="Off Shift"
+              title="Off Shift"
+              value={offShift}
+              onChange={(event) => setOffShift(event.target.value)}
+            />
+          </div>
 
           <CoordinatesInput
             latitude={latitude}

@@ -130,6 +130,9 @@ export const createUser = async (payload: {
   name: string;
   userId: string;
   password: string;
+  site?: string;
+  onShift?: string;
+  offShift?: string;
   latitude: number;
   longitude: number;
   defaultRadius?: number;
@@ -139,6 +142,9 @@ export const createUser = async (payload: {
   formData.append("name", payload.name);
   formData.append("userId", payload.userId);
   formData.append("password", payload.password);
+  formData.append("site", payload.site ?? "");
+  formData.append("onShift", payload.onShift ?? "");
+  formData.append("offShift", payload.offShift ?? "");
   formData.append("latitude", String(payload.latitude));
   formData.append("longitude", String(payload.longitude));
 
@@ -173,6 +179,9 @@ export const updateUser = async (
     name?: string;
     userId?: string;
     password?: string;
+    site?: string;
+    onShift?: string;
+    offShift?: string;
     latitude?: number;
     longitude?: number;
     defaultRadius?: number;
@@ -184,6 +193,10 @@ export const updateUser = async (
   if (payload.name) formData.append("name", payload.name);
   if (payload.userId) formData.append("userId", payload.userId);
   if (payload.password) formData.append("password", payload.password);
+  if (payload.site !== undefined) formData.append("site", payload.site);
+  if (payload.onShift !== undefined) formData.append("onShift", payload.onShift);
+  if (payload.offShift !== undefined)
+    formData.append("offShift", payload.offShift);
   if (payload.latitude !== undefined)
     formData.append("latitude", String(payload.latitude));
   if (payload.longitude !== undefined)

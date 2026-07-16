@@ -20,6 +20,9 @@ export type AuthUser = {
     latitude?: number;
     longitude?: number;
   };
+  site?: string;
+  onShift?: string;
+  offShift?: string;
 };
 
 export type LoginResponse = {
@@ -55,6 +58,9 @@ export type UserListItem = {
     latitude?: number;
     longitude?: number;
   };
+  site?: string;
+  onShift?: string;
+  offShift?: string;
   defaultRadius?: number;
   createdAt?: string;
   updatedAt?: string;

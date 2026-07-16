@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Building2,
+  Clock,
   Download,
   Eye,
   EyeOff,
@@ -486,6 +488,9 @@ function UserDetailsBody({
         <InfoCard label="User Name" value={user.name || "-"} icon={UserIcon} />
         <InfoCard label="User ID" value={user.userId || "-"} icon={IdCard} />
         <PasswordInfoCard value={user.textPassword || ""} />
+        <InfoCard label="Site" value={user.site || "-"} icon={Building2} />
+        <InfoCard label="On Shift" value={user.onShift || "-"} icon={Clock} />
+        <InfoCard label="Off Shift" value={user.offShift || "-"} icon={Clock} />
       </div>
 
       <ActivityHistoryCard user={user} onViewReports={onViewReports} />
