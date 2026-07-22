@@ -40,23 +40,32 @@ import { formatDateTimeLabel } from "@/lib/utils";
 import type { ChecklistItem } from "@/types/api";
 
 const PAGE_LIMIT = 8;
+const REALTIME_REFETCH_INTERVAL = 5000;
 
 const alertStatusDisplay: Record<
   ChecklistItem["status"],
   { label: string; variant: "danger" | "success" | "warning" }
 > = {
-  checked_in: { label: "Book In", variant: "success" },
-  checked_out: { label: "Book Off", variant: "danger" },
+  checked_in: { label: "Booked-In", variant: "success" },
+  checked_out: { label: "Booked-Off", variant: "danger" },
   checked_in_missed: { label: "Missed Check-In", variant: "warning" },
-  user_outside_radius: { label: "Check-In: NOT OK", variant: "danger" },
+  user_outside_radius: { label: "Out of location", variant: "danger" },
+  back_inside_radius: { label: "Back inside location", variant: "success" },
   re_checked_in: { label: "Check-In: OK", variant: "success" },
+  checked_in_not_ok: { label: "Check-In: NOT OK", variant: "danger" },
 };
 
 const getAlertStatusDisplay = (status: ChecklistItem["status"]) =>
   alertStatusDisplay[status] ?? { label: status, variant: "danger" as const };
 
-// Matches the backend workDate format (new Date().toISOString().slice(0, 10)).
-const getTodayDate = () => new Date().toISOString().slice(0, 10);
+const getDeviceDate = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
 
 export default function AlertManagementPage() {
   const queryClient = useQueryClient();
@@ -69,7 +78,7 @@ export default function AlertManagementPage() {
   const [selectedAlert, setSelectedAlert] = useState<ChecklistItem | null>(null);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewAlert, setViewAlert] = useState<ChecklistItem | null>(null);
-  const [viewDate, setViewDate] = useState(getTodayDate);
+  const [viewDate, setViewDate] = useState(getDeviceDate);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -84,6 +93,8 @@ export default function AlertManagementPage() {
   const alertsQuery = useQuery({
     queryKey: QUERY_KEYS.alerts(page, search),
     queryFn: () => getAlerts({ page, limit: PAGE_LIMIT, search }),
+    refetchInterval: REALTIME_REFETCH_INTERVAL,
+    refetchIntervalInBackground: true,
   });
 
   const viewUserId = viewAlert?.user?._id;
@@ -96,6 +107,8 @@ export default function AlertManagementPage() {
         date: viewDate || undefined,
       }),
     enabled: viewModalOpen && Boolean(viewUserId),
+    refetchInterval: viewModalOpen ? REALTIME_REFETCH_INTERVAL : false,
+    refetchIntervalInBackground: true,
   });
 
   const sendMutation = useMutation({
@@ -130,6 +143,12 @@ export default function AlertManagementPage() {
   const currentLimit = pagination?.limit ?? PAGE_LIMIT;
   const startResult = alerts.length ? (currentPage - 1) * currentLimit + 1 : 0;
   const endResult = (currentPage - 1) * currentLimit + alerts.length;
+  const checklistHistory = [...(checklistsQuery.data ?? [])].sort((first, second) => {
+    const firstTime = new Date(first.checkInAt || first.checkOutAt || 0).getTime();
+    const secondTime = new Date(second.checkInAt || second.checkOutAt || 0).getTime();
+
+    return firstTime - secondTime;
+  });
 
   return (
     <section className="space-y-6">
@@ -204,7 +223,7 @@ export default function AlertManagementPage() {
                           className="size-9 rounded-full bg-[#e9f0ff] text-[#2b6bff]"
                           onClick={() => {
                             setViewAlert(alert);
-                            setViewDate(getTodayDate());
+                            setViewDate(getDeviceDate());
                             setViewModalOpen(true);
                           }}
                         >
@@ -294,12 +313,9 @@ export default function AlertManagementPage() {
       </Dialog>
 
       <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-        <DialogContent className="max-w-[600px] rounded-2xl">
+        <DialogContent className="max-w-[760px] rounded-2xl">
           <DialogHeader>
             <DialogTitle>Alert Details</DialogTitle>
-            <DialogDescription>
-              Location alert raised because the user moved out of their location zone.
-            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -316,7 +332,7 @@ export default function AlertManagementPage() {
 
             <div>
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-[#2f2f2f]">Checklist History</p>
+                <p className="text-sm font-semibold text-[#2f2f2f]">Alert History</p>
                 <div className="flex items-center gap-2">
                   <Input
                     type="date"
@@ -346,13 +362,13 @@ export default function AlertManagementPage() {
                 <p className="rounded-xl bg-[#fdecef] px-3 py-6 text-center text-sm text-[#ff2b2b]">
                   {getApiMessage(checklistsQuery.error, "Unable to load checklist history")}
                 </p>
-              ) : (checklistsQuery.data?.length ?? 0) === 0 ? (
+              ) : checklistHistory.length === 0 ? (
                 <p className="rounded-xl bg-[#efefef] px-3 py-6 text-center text-sm text-[#6f6f6f]">
                   No checklist records found
                 </p>
               ) : (
-                <div className="max-h-[320px] space-y-3 overflow-y-auto pr-1">
-                  {checklistsQuery.data?.map((item) => (
+                <div className="max-h-[460px] space-y-3 overflow-y-auto pr-1">
+                  {checklistHistory.map((item) => (
                     <div key={item._id} className="rounded-xl border border-[#e4e4e4] p-3">
                       <div className="mb-2 flex items-center justify-between">
                         <Badge variant={getAlertStatusDisplay(item.status).variant}>

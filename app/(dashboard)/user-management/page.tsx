@@ -2,8 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { jsPDF } from "jspdf";
 import {
+  AlertTriangle,
   Building2,
+  Check,
+  CheckCircle2,
   Clock,
   Download,
   Eye,
@@ -16,7 +20,10 @@ import {
   Plus,
   Search,
   Trash2,
+  X,
+  XCircle,
   User as UserIcon,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -58,7 +65,7 @@ import {
   getUsers,
   updateUser,
 } from "@/lib/api";
-import { QUERY_KEYS } from "@/lib/constants";
+import { API_BASE_URL, QUERY_KEYS } from "@/lib/constants";
 import { formatDateLabel, getUserInitials } from "@/lib/utils";
 import type { ReportItem, UserListItem } from "@/types/api";
 
@@ -68,8 +75,100 @@ type UserActivity = {
   id: string;
   label: string;
   time: string;
-  status: "danger" | "success";
+  kind:
+    | "booked_in"
+    | "booked_off"
+    | "check_in_ok"
+    | "check_in_not_ok"
+    | "missed_check_in"
+    | "out_of_location"
+    | "back_inside";
 };
+
+const activityDisplay: Record<
+  UserActivity["kind"],
+  {
+    icon: LucideIcon;
+    className: string;
+  }
+> = {
+  booked_in: {
+    icon: Check,
+    className: "bg-[#e2f5e7] text-[#228f45]",
+  },
+  booked_off: {
+    icon: CheckCircle2,
+    className: "bg-[#e9f0ff] text-[#2b6bff]",
+  },
+  check_in_ok: {
+    icon: CheckCircle2,
+    className: "bg-[#e2f5e7] text-[#228f45]",
+  },
+  check_in_not_ok: {
+    icon: X,
+    className: "bg-[#ffe5e5] text-[#ff2b2b]",
+  },
+  missed_check_in: {
+    icon: AlertTriangle,
+    className: "bg-[#fff2d8] text-[#e89900]",
+  },
+  out_of_location: {
+    icon: XCircle,
+    className: "bg-[#ffe5e5] text-[#ff2b2b]",
+  },
+  back_inside: {
+    icon: MapPin,
+    className: "bg-[#e2f5e7] text-[#228f45]",
+  },
+};
+
+const getActivityKind = (status?: string, checkOutType?: string | null): UserActivity["kind"] => {
+  if (checkOutType === "auto" || status === "user_outside_radius") {
+    return "out_of_location";
+  }
+
+  switch (status) {
+    case "checked_out":
+      return "booked_off";
+    case "re_checked_in":
+      return "check_in_ok";
+    case "checked_in_not_ok":
+      return "check_in_not_ok";
+    case "checked_in_missed":
+      return "missed_check_in";
+    case "back_inside_radius":
+      return "back_inside";
+    case "checked_in":
+    default:
+      return "booked_in";
+  }
+};
+
+const getActivityLabel = (kind: UserActivity["kind"]) => {
+  switch (kind) {
+    case "booked_off":
+      return "Booked-Off";
+    case "check_in_ok":
+      return "Check-In: OK";
+    case "check_in_not_ok":
+      return "Check-In: NOT OK";
+    case "missed_check_in":
+      return "Missed Check-In";
+    case "out_of_location":
+      return "Out of location";
+    case "back_inside":
+      return "Back inside location";
+    case "booked_in":
+    default:
+      return "Booked-In";
+  }
+};
+
+const formatTimeLabel = (dateValue: string | Date) =>
+  new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(dateValue));
 
 export default function UserManagementPage() {
   const queryClient = useQueryClient();
@@ -183,17 +282,16 @@ export default function UserManagementPage() {
 
   const activities = useMemo<UserActivity[]>(() => {
     const checklists = detailsQuery.data?.checklists ?? [];
-    return checklists.slice(0, 5).map((item) => ({
-      id: item._id,
-      label:
-        item.checkOutType === "auto"
-          ? "Left Assigned Area"
-          : item.status === "checked_out"
-            ? "End Shift"
-            : "Checked-In",
-      time: item.checkOutAt ?? item.checkInAt,
-      status: item.checkOutType === "auto" ? "danger" : "success",
-    }));
+    return checklists.map((item) => {
+      const kind = getActivityKind(item.status, item.checkOutType);
+
+      return {
+        id: item._id,
+        label: getActivityLabel(kind),
+        time: item.checkOutAt ?? item.checkInAt,
+        kind,
+      };
+    });
   }, [detailsQuery.data?.checklists]);
 
   return (
@@ -356,6 +454,7 @@ export default function UserManagementPage() {
         open={reportsOpen}
         onOpenChange={setReportsOpen}
         reports={reports}
+        user={selectedUser}
       />
 
       <ConfirmDialog
@@ -506,8 +605,16 @@ function ActivityHistoryCard({
   user: UserListItem;
   onViewReports: () => void;
 }) {
-  const latitude = user.location?.latitude;
-  const longitude = user.location?.longitude;
+  const location =
+    user.weeklyLocations?.sunday ??
+    user.weeklyLocations?.monday ??
+    user.weeklyLocations?.tuesday ??
+    user.weeklyLocations?.wednesday ??
+    user.weeklyLocations?.thursday ??
+    user.weeklyLocations?.friday ??
+    user.weeklyLocations?.saturday;
+  const latitude = location?.latitude;
+  const longitude = location?.longitude;
   const hasLocation =
     typeof latitude === "number" &&
     typeof longitude === "number" &&
@@ -557,7 +664,7 @@ function ActivitiesList({ activities }: { activities: UserActivity[] }) {
   }
 
   return (
-    <div className="space-y-2">
+    <div className="max-h-[260px] space-y-2 overflow-y-auto pr-1">
       {activities.map((item) => (
         <ActivityRow key={item.id} item={item} />
       ))}
@@ -566,20 +673,22 @@ function ActivitiesList({ activities }: { activities: UserActivity[] }) {
 }
 
 function ActivityRow({ item }: { item: UserActivity }) {
+  const display = activityDisplay[item.kind];
+  const ActivityIcon = display.icon;
+
   return (
-    <div className="flex items-center justify-between rounded-lg border border-[#d6c8a0] bg-white px-3 py-2">
+    <div className="grid grid-cols-[1fr_auto_auto] items-center gap-4 rounded-lg border border-[#d6c8a0] bg-white px-3 py-2">
       <div className="flex items-center gap-2 text-sm font-medium">
         <span
-          className={`inline-flex size-5 items-center justify-center rounded-full ${
-            item.status === "danger"
-              ? "bg-[#ffe5e5] text-[#ff2b2b]"
-              : "bg-[#e2f5e7] text-[#228f45]"
-          }`}
+          className={`inline-flex size-5 items-center justify-center rounded-full ${display.className}`}
         >
-          <MapPin className="size-3" />
+          <ActivityIcon className="size-3" />
         </span>
         {item.label}
       </div>
+      <span className="text-sm font-medium text-[#2f2f2f]">
+        {formatTimeLabel(item.time)}
+      </span>
       <span className="text-xs text-[#626262]">{formatDateLabel(item.time)}</span>
     </div>
   );
@@ -589,10 +698,12 @@ function ReportsDialog({
   open,
   onOpenChange,
   reports,
+  user,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   reports: ReportItem[];
+  user?: UserListItem;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -601,13 +712,19 @@ function ReportsDialog({
           <DialogTitle className="text-[32px]">View Reports</DialogTitle>
         </DialogHeader>
 
-        <ReportsList reports={reports} />
+        <ReportsList reports={reports} user={user} />
       </DialogContent>
     </Dialog>
   );
 }
 
-function ReportsList({ reports }: { reports: ReportItem[] }) {
+function ReportsList({
+  reports,
+  user,
+}: {
+  reports: ReportItem[];
+  user?: UserListItem;
+}) {
   if (reports.length === 0) {
     return <p className="text-sm text-[#666]">No reports found</p>;
   }
@@ -615,41 +732,339 @@ function ReportsList({ reports }: { reports: ReportItem[] }) {
   return (
     <div className="space-y-2">
       {reports.map((report) => (
-        <ReportRow key={report._id} report={report} />
+        <ReportRow key={report._id} report={report} user={user} />
       ))}
     </div>
   );
 }
 
-function ReportRow({ report }: { report: ReportItem }) {
-  const onDownload = () => {
-    const content = `${report.reportName}\n\n${report.reportDescription}`;
-    const blob = new Blob([content], { type: "text/plain" });
-    const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = objectUrl;
-    link.download = `${report.reportName.replace(/\s+/g, "-").toLowerCase()}.txt`;
-    link.click();
-    URL.revokeObjectURL(objectUrl);
-  };
+function ReportRow({
+  report,
+  user,
+}: {
+  report: ReportItem;
+  user?: UserListItem;
+}) {
+  const reportTitle =
+    String(
+      report.reportName ||
+        (report.reportDate ? formatDateLabel(report.reportDate) : "Report")
+    );
+  const reportDate = report.reportDate
+    ? formatDateLabel(report.reportDate)
+    : formatDateLabel(report.createdAt);
+  const fileName = `${sanitizePdfFileName(reportTitle)}.pdf`;
 
   return (
     <div className="flex items-center justify-between rounded-lg border border-[#d9ccaa] bg-[#f7f7f7] px-3 py-2">
       <div className="flex min-w-0 items-center gap-2">
         <FileText className="size-4 text-[#676767]" />
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{report.reportName}</p>
-          <p className="text-xs text-[#6d6d6d]">{formatDateLabel(report.createdAt)}</p>
+          <p className="truncate text-sm font-semibold">{reportTitle}</p>
+          <p className="text-xs text-[#6d6d6d]">{reportDate}</p>
         </div>
       </div>
 
       <button
         type="button"
         className="text-[#6f6f6f] hover:text-[#383838]"
-        onClick={onDownload}
+        title="Download PDF"
+        onClick={() => {
+          void downloadReportPdf(report, fileName, user);
+        }}
       >
         <Download className="size-4" />
       </button>
     </div>
   );
+}
+
+const stripTrailingSlash = (value: unknown, fallback = "") => {
+  let text = String(value ?? fallback);
+  while (text.endsWith("/")) {
+    text = text.slice(0, -1);
+  }
+  return text;
+};
+
+const stripLeadingSlashes = (value: unknown) => {
+  let text = String(value ?? "");
+  while (text.startsWith("/")) {
+    text = text.slice(1);
+  }
+  return text;
+};
+
+const sanitizePdfFileName = (value: unknown) => {
+  const text = String(value ?? "report").toLowerCase();
+  let result = "";
+  let previousWasDash = false;
+
+  for (const character of text) {
+    const isAlphaNumeric =
+      (character >= "a" && character <= "z") ||
+      (character >= "0" && character <= "9");
+
+    if (isAlphaNumeric) {
+      result += character;
+      previousWasDash = false;
+    } else if (!previousWasDash) {
+      result += "-";
+      previousWasDash = true;
+    }
+  }
+
+  while (result.endsWith("-")) {
+    result = result.slice(0, -1);
+  }
+
+  return result || "report";
+};
+
+const getReportImageUrlCandidates = (image?: {
+  fileName?: string;
+  path?: string;
+  url?: string;
+}) => {
+  const apiBaseUrl = stripTrailingSlash(API_BASE_URL, window.location.origin);
+  const imageBaseUrl = apiBaseUrl;
+  const urls = new Set<string>();
+  if (image?.fileName) {
+    urls.add(
+      `${imageBaseUrl}/public/report-images/${encodeURIComponent(image.fileName)}`
+    );
+    urls.add(`${apiBaseUrl}/api/v1/report/image/${encodeURIComponent(image.fileName)}`);
+  }
+
+  const values = [image?.url, image?.path, image?.fileName].filter(Boolean);
+
+  values.forEach((value) => {
+    const text = String(value);
+    if (/^https?:\/\//i.test(text)) {
+      urls.add(text);
+      return;
+    }
+
+    const cleanValue = stripLeadingSlashes(text);
+    const normalizedPaths = [
+      cleanValue.startsWith("public/") ? `/${cleanValue}` : "",
+      cleanValue.startsWith("report-images/") ? `/public/${cleanValue}` : "",
+      `/public/report-images/${cleanValue}`,
+    ].filter(Boolean);
+
+    normalizedPaths.forEach((path) => {
+      urls.add(`${imageBaseUrl}${path}`);
+      urls.add(`${apiBaseUrl}${path}`);
+      urls.add(`${window.location.origin}${path}`);
+    });
+  });
+
+  return Array.from(urls);
+};
+
+const formatReportDescription = (value?: string) => {
+  let normalized = String(value ?? "").trim().toLowerCase();
+  while (normalized.endsWith(".")) {
+    normalized = normalized.slice(0, -1);
+  }
+
+  if (normalized === "checked in") return "Booked-In.";
+  if (normalized === "checked out") return "Booked-Off.";
+
+  return value || "";
+};
+
+const loadImageDataUrl = async (url: string) => {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      return null;
+    }
+
+    const blob = await response.blob();
+    if (!blob.type.startsWith("image/")) {
+      return null;
+    }
+
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    const format = blob.type.includes("png") ? "PNG" : "JPEG";
+
+    return { dataUrl, format };
+  } catch {
+    return null;
+  }
+};
+
+const loadFirstAvailableImageDataUrl = async (urls: string[]) => {
+  for (const url of urls) {
+    const image = await loadImageDataUrl(url);
+    if (image) return image;
+  }
+
+  return null;
+};
+
+async function downloadReportPdf(
+  report: ReportItem,
+  fileName: string,
+  user?: UserListItem
+) {
+  const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+  const logoUrl = `${window.location.origin}/logo-rss.png`;
+  const logo = await loadImageDataUrl(logoUrl);
+  const entries = report.entries?.length
+    ? report.entries
+    : [{ time: "-", description: report.reportDescription || "No entries found" }];
+  const reportDate = report.reportDate || new Date(report.createdAt).toISOString().slice(0, 10);
+  const userName = report.user?.name || report.security || user?.name || "-";
+  const site = report.site || user?.site || "-";
+  const onShift = report.onShift || user?.onShift || "-";
+  const offShift = report.offShift || user?.offShift || "-";
+  const security = report.security || user?.name || user?.userId || userName;
+
+  const pageWidth = 210;
+  const pageHeight = 297;
+  const marginX = 10;
+  const contentWidth = pageWidth - marginX * 2;
+  const cell = (
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    text: string,
+    options: { bold?: boolean; center?: boolean; fill?: boolean } = {}
+  ) => {
+    if (options.fill) {
+      doc.setFillColor(246, 246, 246);
+      doc.rect(x, y, width, height, "F");
+    }
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.35);
+    doc.rect(x, y, width, height);
+    doc.setFont("times", options.bold ? "bold" : "normal");
+    doc.setFontSize(8);
+    const lines = doc.splitTextToSize(text || "-", width - 3);
+    const textX = options.center ? x + width / 2 : x + 1.5;
+    const textY = y + height / 2 + 1.2 - (lines.length - 1) * 1.8;
+    doc.text(lines, textX, textY, { align: options.center ? "center" : "left" });
+  };
+  const drawReportHeader = () => {
+    doc.setFont("times", "bold");
+    doc.setFontSize(16);
+    doc.text("REGAL SECURITY SERVICES LTD.", pageWidth / 2, 14, { align: "center" });
+
+    doc.setFillColor(255, 243, 205);
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.35);
+    doc.rect(marginX, 18, contentWidth, 28, "FD");
+    if (logo) {
+      doc.addImage(logo.dataUrl, logo.format, 20, 21, 20, 20);
+    }
+    doc.setFont("times", "normal");
+    doc.setFontSize(9);
+    doc.text(
+      [
+        "Head Office: 44 Victoria Street, Toronto, ON",
+        "Phone: +1 (416) 000-0000",
+        "Email: info@regalsecurity.ca",
+        "Web: www.regalsecurity.ca",
+      ],
+      48,
+      26
+    );
+
+    doc.setFont("times", "bold");
+    doc.setFontSize(15);
+    doc.text("DAILY LOG REPORT", marginX, 56);
+
+    const summaryY = 60;
+    const widths = [30, 26, 40, 30, 30, 34];
+    const labels = ["DATE", "DAY", "SITE", "ON SHIFT", "OFF SHIFT", "SECURITY"];
+    const values = [
+      reportDate,
+      report.day || "-",
+      site,
+      onShift,
+      offShift,
+      security,
+    ];
+    let cursorX = marginX;
+    labels.forEach((label, index) => {
+      cell(cursorX, summaryY, widths[index], 7, label, {
+        bold: true,
+        center: true,
+        fill: true,
+      });
+      cell(cursorX, summaryY + 7, widths[index], 8, values[index], { center: true });
+      cursorX += widths[index];
+    });
+
+    doc.setLineWidth(0.35);
+    doc.rect(marginX, 79, contentWidth, 8);
+    doc.setFont("times", "bold");
+    doc.setFontSize(9);
+    doc.text("USER NAME:", marginX + 2, 84.5);
+    doc.setFont("times", "normal");
+    doc.text(userName, marginX + 23, 84.5);
+
+    cell(marginX, 91, 22, 9, "TIME", { bold: true, center: true, fill: true });
+    cell(marginX + 22, 91, 128, 9, "DESCRIPTION", {
+      bold: true,
+      center: true,
+      fill: true,
+    });
+    cell(marginX + 150, 91, 40, 9, "IMAGE", { bold: true, center: true, fill: true });
+  };
+
+  drawReportHeader();
+
+  let y = 100;
+  for (const entry of entries) {
+    const firstImage = entry.images?.[0];
+    const imageUrlCandidates = getReportImageUrlCandidates(firstImage);
+    const descriptionLines = doc.splitTextToSize(
+      formatReportDescription(entry.description) || "-",
+      124
+    );
+    const rowHeight = Math.max(
+      imageUrlCandidates.length ? 62 : 10,
+      descriptionLines.length * 4.2 + 5
+    );
+    if (y + rowHeight > pageHeight - 15) {
+      doc.addPage();
+      drawReportHeader();
+      y = 100;
+    }
+
+    cell(marginX, y, 22, rowHeight, entry.time || "-", { center: true });
+    doc.rect(marginX + 22, y, 128, rowHeight);
+    doc.setFont("times", "normal");
+    doc.setFontSize(9);
+    doc.text(descriptionLines, marginX + 24, y + 6);
+    doc.rect(marginX + 150, y, 40, rowHeight);
+
+    if (imageUrlCandidates.length) {
+      const image = await loadFirstAvailableImageDataUrl(imageUrlCandidates);
+      if (image) {
+        doc.addImage(image.dataUrl, image.format, marginX + 153, y + 3, 34, rowHeight - 6);
+      } else {
+        doc.setFont("times", "normal");
+        doc.setFontSize(7);
+        doc.text(
+          doc.splitTextToSize("Image file not found", 34),
+          marginX + 153,
+          y + 7
+        );
+      }
+    }
+
+    y += rowHeight;
+  }
+
+  doc.save(fileName);
 }

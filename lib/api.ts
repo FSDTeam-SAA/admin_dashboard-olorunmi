@@ -9,6 +9,7 @@ import type {
   ReportsListResponse,
   UserDetailsResponse,
   UserListItem,
+  WeeklyLocations,
   UsersListResponse,
 } from "@/types/api";
 
@@ -133,8 +134,7 @@ export const createUser = async (payload: {
   site?: string;
   onShift?: string;
   offShift?: string;
-  latitude: number;
-  longitude: number;
+  weeklyLocations: WeeklyLocations;
   defaultRadius?: number;
   profilePhoto?: File | null;
 }) => {
@@ -145,8 +145,7 @@ export const createUser = async (payload: {
   formData.append("site", payload.site ?? "");
   formData.append("onShift", payload.onShift ?? "");
   formData.append("offShift", payload.offShift ?? "");
-  formData.append("latitude", String(payload.latitude));
-  formData.append("longitude", String(payload.longitude));
+  formData.append("weeklyLocations", JSON.stringify(payload.weeklyLocations));
 
   if (payload.defaultRadius !== undefined) {
     formData.append("defaultRadius", String(payload.defaultRadius));
@@ -182,8 +181,7 @@ export const updateUser = async (
     site?: string;
     onShift?: string;
     offShift?: string;
-    latitude?: number;
-    longitude?: number;
+    weeklyLocations?: WeeklyLocations;
     defaultRadius?: number;
     profilePhoto?: File | null;
   }
@@ -197,10 +195,9 @@ export const updateUser = async (
   if (payload.onShift !== undefined) formData.append("onShift", payload.onShift);
   if (payload.offShift !== undefined)
     formData.append("offShift", payload.offShift);
-  if (payload.latitude !== undefined)
-    formData.append("latitude", String(payload.latitude));
-  if (payload.longitude !== undefined)
-    formData.append("longitude", String(payload.longitude));
+  if (payload.weeklyLocations) {
+    formData.append("weeklyLocations", JSON.stringify(payload.weeklyLocations));
+  }
   if (payload.defaultRadius !== undefined)
     formData.append("defaultRadius", String(payload.defaultRadius));
   if (payload.profilePhoto) formData.append("profilePhoto", payload.profilePhoto);

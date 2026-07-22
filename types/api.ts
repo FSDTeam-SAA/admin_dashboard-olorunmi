@@ -4,6 +4,22 @@ export type ApiResponse<T> = {
   data: T;
 };
 
+export type LocationPoint = {
+  day?: string;
+  latitude: number;
+  longitude: number;
+};
+
+export type WeeklyLocations = {
+  sunday: LocationPoint;
+  monday: LocationPoint;
+  tuesday: LocationPoint;
+  wednesday: LocationPoint;
+  thursday: LocationPoint;
+  friday: LocationPoint;
+  saturday: LocationPoint;
+};
+
 export type AuthUser = {
   _id: string;
   name: string;
@@ -16,10 +32,7 @@ export type AuthUser = {
   };
   phone?: string;
   address?: string;
-  location?: {
-    latitude?: number;
-    longitude?: number;
-  };
+  weeklyLocations?: WeeklyLocations;
   site?: string;
   onShift?: string;
   offShift?: string;
@@ -54,10 +67,7 @@ export type UserListItem = {
     public_id?: string;
     url?: string;
   };
-  location?: {
-    latitude?: number;
-    longitude?: number;
-  };
+  weeklyLocations?: WeeklyLocations;
   site?: string;
   onShift?: string;
   offShift?: string;
@@ -83,7 +93,9 @@ export type ChecklistItem = {
     | "checked_out"
     | "checked_in_missed"
     | "user_outside_radius"
-    | "re_checked_in";
+    | "back_inside_radius"
+    | "re_checked_in"
+    | "checked_in_not_ok";
   alertStatus?: "pending" | "sent";
   alertSentAt?: string | null;
   checkInLocation: {
@@ -98,8 +110,24 @@ export type ChecklistItem = {
 
 export type ReportItem = {
   _id: string;
-  reportName: string;
-  reportDescription: string;
+  reportName?: string;
+  reportDescription?: string;
+  reportDate?: string;
+  day?: string;
+  site?: string;
+  onShift?: string;
+  offShift?: string;
+  security?: string;
+  entries?: Array<{
+    _id?: string;
+    time?: string;
+    description?: string;
+    images?: Array<{
+      fileName?: string;
+      path?: string;
+      url?: string;
+    }>;
+  }>;
   createdAt: string;
   user?: {
     _id: string;

@@ -4,7 +4,6 @@ import { decodeJwtExpiry } from "@/lib/utils";
 import type { ApiResponse, LoginResponse } from "@/types/api";
 
 const baseUrlRaw =
-  process.env.NEXTPUBLICBASEURL ||
   process.env.NEXT_PUBLIC_BASE_URL ||
   "http://localhost:5000";
 const apiBaseUrl = baseUrlRaw.endsWith("/")

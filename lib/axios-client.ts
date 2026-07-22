@@ -4,7 +4,6 @@ import axios from "axios";
 import { getSession, signOut } from "next-auth/react";
 
 const baseUrlRaw =
-  process.env.NEXTPUBLICBASEURL ||
   process.env.NEXT_PUBLIC_BASE_URL ||
   "http://localhost:5000";
 

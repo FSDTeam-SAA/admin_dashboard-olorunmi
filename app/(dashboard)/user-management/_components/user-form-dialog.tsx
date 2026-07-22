@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState, type ComponentProps } from "react";
 import {
   Building2,
+  CalendarDays,
   Clock,
   IdCard,
   Lock,
+  MapPin,
   Plus,
   User,
   type LucideIcon,
@@ -16,13 +18,29 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { getUserInitials } from "@/lib/utils";
-import type { UserListItem } from "@/types/api";
+import { cn, getUserInitials } from "@/lib/utils";
+import type { UserListItem, WeeklyLocations } from "@/types/api";
 
 import { OpenStreetMapPicker } from "./open-street-map-picker";
 
 const DEFAULT_LATITUDE = 23.8103;
 const DEFAULT_LONGITUDE = 90.4125;
+const WEEK_DAYS = [
+  { key: "sunday", label: "Sunday" },
+  { key: "monday", label: "Monday" },
+  { key: "tuesday", label: "Tuesday" },
+  { key: "wednesday", label: "Wednesday" },
+  { key: "thursday", label: "Thursday" },
+  { key: "friday", label: "Friday" },
+  { key: "saturday", label: "Saturday" },
+] as const;
+
+type WeekDayKey = (typeof WEEK_DAYS)[number]["key"];
+type WeeklyLocationFormRow = {
+  key: WeekDayKey;
+  latitude: string;
+  longitude: string;
+};
 
 export type UserFormPayload = {
   name: string;
@@ -31,8 +49,7 @@ export type UserFormPayload = {
   site: string;
   onShift: string;
   offShift: string;
-  latitude: number;
-  longitude: number;
+  weeklyLocations: WeeklyLocations;
   defaultRadius: number;
   profilePhoto?: File | null;
 };
@@ -58,8 +75,10 @@ export function UserFormDialog({
   const [site, setSite] = useState(initialValues?.site ?? "");
   const [onShift, setOnShift] = useState(initialValues?.onShift ?? "");
   const [offShift, setOffShift] = useState(initialValues?.offShift ?? "");
-  const [latitude, setLatitude] = useState(String(initialValues?.location?.latitude ?? DEFAULT_LATITUDE));
-  const [longitude, setLongitude] = useState(String(initialValues?.location?.longitude ?? DEFAULT_LONGITUDE));
+  const [weeklyLocationRows, setWeeklyLocationRows] = useState<WeeklyLocationFormRow[]>(() =>
+    buildDefaultWeeklyLocationRows(initialValues)
+  );
+  const [activeLocationIndex, setActiveLocationIndex] = useState(0);
   const [defaultRadius, setDefaultRadius] = useState(String(initialValues?.defaultRadius ?? 100));
   const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
 
@@ -71,15 +90,17 @@ export function UserFormDialog({
     return URL.createObjectURL(profilePhoto);
   }, [profilePhoto]);
 
+  const activeLocation = weeklyLocationRows[activeLocationIndex] ?? weeklyLocationRows[0];
+
   const parsedLatitude = useMemo(() => {
-    const value = Number(latitude);
+    const value = Number(activeLocation?.latitude);
     return Number.isNaN(value) ? DEFAULT_LATITUDE : value;
-  }, [latitude]);
+  }, [activeLocation?.latitude]);
 
   const parsedLongitude = useMemo(() => {
-    const value = Number(longitude);
+    const value = Number(activeLocation?.longitude);
     return Number.isNaN(value) ? DEFAULT_LONGITUDE : value;
-  }, [longitude]);
+  }, [activeLocation?.longitude]);
 
   useEffect(() => {
     return () => {
@@ -91,7 +112,7 @@ export function UserFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] !max-w-[680px] overflow-y-auto rounded-2xl p-5">
+      <DialogContent className="max-h-[92vh] !max-w-[920px] overflow-y-auto rounded-2xl p-5">
         <DialogHeader>
           <DialogTitle>{initialValues ? "Update user" : "Add New user"}</DialogTitle>
         </DialogHeader>
@@ -101,24 +122,20 @@ export function UserFormDialog({
           onSubmit={(event) => {
             event.preventDefault();
 
-            const latitudeValue = Number(latitude);
-            const longitudeValue = Number(longitude);
             const parsedRadius = Number(defaultRadius);
+            const validationError = validateWeeklyLocationRows(weeklyLocationRows);
 
-            if (Number.isNaN(latitudeValue) || Number.isNaN(longitudeValue)) {
-              toast.error("Latitude and longitude must be valid numbers");
+            if (validationError) {
+              toast.error(validationError);
               return;
             }
 
-            if (latitudeValue < -90 || latitudeValue > 90) {
-              toast.error("Latitude must be between -90 and 90");
+            if (!Number.isNaN(parsedRadius) && parsedRadius <= 0) {
+              toast.error("Default radius must be a positive number");
               return;
             }
 
-            if (longitudeValue < -180 || longitudeValue > 180) {
-              toast.error("Longitude must be between -180 and 180");
-              return;
-            }
+            const weeklyLocations = rowsToWeeklyLocations(weeklyLocationRows);
 
             onSubmit({
               name,
@@ -127,8 +144,7 @@ export function UserFormDialog({
               site,
               onShift,
               offShift,
-              latitude: latitudeValue,
-              longitude: longitudeValue,
+              weeklyLocations,
               defaultRadius: Number.isNaN(parsedRadius) ? 100 : parsedRadius,
               profilePhoto,
             });
@@ -191,11 +207,11 @@ export function UserFormDialog({
             />
           </div>
 
-          <CoordinatesInput
-            latitude={latitude}
-            longitude={longitude}
-            onLatitudeChange={setLatitude}
-            onLongitudeChange={setLongitude}
+          <WeeklyLocationsInput
+            rows={weeklyLocationRows}
+            activeIndex={activeLocationIndex}
+            onActiveIndexChange={setActiveLocationIndex}
+            onRowsChange={setWeeklyLocationRows}
           />
 
           <Input
@@ -209,8 +225,17 @@ export function UserFormDialog({
             latitude={parsedLatitude}
             longitude={parsedLongitude}
             onChange={(nextLatitude, nextLongitude) => {
-              setLatitude(nextLatitude.toFixed(6));
-              setLongitude(nextLongitude.toFixed(6));
+              setWeeklyLocationRows((currentRows) =>
+                currentRows.map((row, index) =>
+                  index === activeLocationIndex
+                    ? {
+                        ...row,
+                        latitude: nextLatitude.toFixed(6),
+                        longitude: nextLongitude.toFixed(6),
+                      }
+                    : row
+                )
+              );
             }}
           />
 
@@ -232,6 +257,60 @@ export function UserFormDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function buildDefaultWeeklyLocationRows(initialValues: UserListItem | null) {
+  const firstSavedLocation = WEEK_DAYS
+    .map((weekDay) => initialValues?.weeklyLocations?.[weekDay.key])
+    .find((location) => location?.latitude != null && location?.longitude != null);
+  const fallbackLatitude = firstSavedLocation?.latitude ?? DEFAULT_LATITUDE;
+  const fallbackLongitude = firstSavedLocation?.longitude ?? DEFAULT_LONGITUDE;
+
+  return WEEK_DAYS.map((weekDay) => {
+    const savedLocation = initialValues?.weeklyLocations?.[weekDay.key];
+
+    return {
+      key: weekDay.key,
+      latitude: String(savedLocation?.latitude ?? fallbackLatitude),
+      longitude: String(savedLocation?.longitude ?? fallbackLongitude),
+    };
+  });
+}
+
+function validateWeeklyLocationRows(rows: WeeklyLocationFormRow[]) {
+  for (const row of rows) {
+    const dayLabel = WEEK_DAYS.find((weekDay) => weekDay.key === row.key)?.label ?? row.key;
+    const latitudeValue = Number(row.latitude);
+    const longitudeValue = Number(row.longitude);
+
+    if (Number.isNaN(latitudeValue) || Number.isNaN(longitudeValue)) {
+      return `${dayLabel} latitude and longitude must be valid numbers`;
+    }
+
+    if (latitudeValue < -90 || latitudeValue > 90) {
+      return `${dayLabel} latitude must be between -90 and 90`;
+    }
+
+    if (longitudeValue < -180 || longitudeValue > 180) {
+      return `${dayLabel} longitude must be between -180 and 180`;
+    }
+  }
+
+  return null;
+}
+
+function rowsToWeeklyLocations(rows: WeeklyLocationFormRow[]): WeeklyLocations {
+  return rows.reduce((weeklyLocations, row) => {
+    const dayLabel = WEEK_DAYS.find((weekDay) => weekDay.key === row.key)?.label ?? row.key;
+
+    weeklyLocations[row.key] = {
+      day: dayLabel,
+      latitude: Number(row.latitude),
+      longitude: Number(row.longitude),
+    };
+
+    return weeklyLocations;
+  }, {} as WeeklyLocations);
 }
 
 function ProfilePhotoPicker({
@@ -278,31 +357,82 @@ function ProfilePhotoPicker({
   );
 }
 
-function CoordinatesInput({
-  latitude,
-  longitude,
-  onLatitudeChange,
-  onLongitudeChange,
+function WeeklyLocationsInput({
+  rows,
+  activeIndex,
+  onActiveIndexChange,
+  onRowsChange,
 }: {
-  latitude: string;
-  longitude: string;
-  onLatitudeChange: (value: string) => void;
-  onLongitudeChange: (value: string) => void;
+  rows: WeeklyLocationFormRow[];
+  activeIndex: number;
+  onActiveIndexChange: (index: number) => void;
+  onRowsChange: (rows: WeeklyLocationFormRow[]) => void;
 }) {
+  const updateRow = (
+    rowIndex: number,
+    field: keyof Pick<WeeklyLocationFormRow, "latitude" | "longitude">,
+    value: string
+  ) => {
+    onRowsChange(
+      rows.map((row, index) =>
+        index === rowIndex ? { ...row, [field]: value } : row
+      )
+    );
+  };
+
   return (
-    <div className="grid grid-cols-2 gap-2">
-      <Input
-        placeholder="Latitude"
-        value={latitude}
-        onChange={(event) => onLatitudeChange(event.target.value)}
-        required
-      />
-      <Input
-        placeholder="Longitude"
-        value={longitude}
-        onChange={(event) => onLongitudeChange(event.target.value)}
-        required
-      />
+    <div className="space-y-2 rounded-xl border border-[#dfdfdf] bg-[#f7f7f7] p-2">
+      <div className="flex items-center gap-2 px-1 text-sm font-semibold text-[#2f2f2f]">
+        <CalendarDays className="size-4 text-[#8f7f52]" />
+        7 day locations
+      </div>
+
+      <div className="space-y-2">
+        {rows.map((row, index) => {
+          const isActive = index === activeIndex;
+
+          return (
+            <div
+              key={row.key}
+              className={cn(
+                "grid gap-2 rounded-lg border p-2 md:grid-cols-[minmax(260px,1fr)_minmax(130px,160px)_minmax(130px,160px)]",
+                "cursor-pointer",
+                isActive
+                  ? "border-[#a79663] bg-white"
+                  : "border-transparent bg-[#ececec]"
+              )}
+            >
+              <button
+                type="button"
+                className="flex min-h-10 items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-[#2f2f2f] hover:bg-[#f8f6ef]"
+                onClick={() => onActiveIndexChange(index)}
+              >
+                <MapPin className="size-4 shrink-0 text-[#8f7f52]" />
+                <span className="truncate">
+                  {WEEK_DAYS[index].label}
+                </span>
+              </button>
+
+              <Input
+                placeholder="Latitude"
+                value={row.latitude}
+                onChange={(event) =>
+                  updateRow(index, "latitude", event.target.value)
+                }
+                required
+              />
+              <Input
+                placeholder="Longitude"
+                value={row.longitude}
+                onChange={(event) =>
+                  updateRow(index, "longitude", event.target.value)
+                }
+                required
+              />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
