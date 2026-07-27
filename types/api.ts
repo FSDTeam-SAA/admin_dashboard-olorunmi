@@ -6,6 +6,7 @@ export type ApiResponse<T> = {
 
 export type LocationPoint = {
   day?: string;
+  site?: string;
   latitude: number;
   longitude: number;
 };

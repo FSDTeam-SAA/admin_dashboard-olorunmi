@@ -61,6 +61,7 @@ import {
   createUser,
   deleteUser,
   getApiMessage,
+  getUserChecklists,
   getUserDetails,
   getUsers,
   updateUser,
@@ -70,6 +71,15 @@ import { formatDateLabel, getUserInitials } from "@/lib/utils";
 import type { ReportItem, UserListItem } from "@/types/api";
 
 const PAGE_LIMIT = 8;
+const WEEK_DAY_KEYS = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+] as const;
 
 type UserActivity = {
   id: string;
@@ -170,6 +180,65 @@ const formatTimeLabel = (dateValue: string | Date) =>
     minute: "2-digit",
   }).format(new Date(dateValue));
 
+const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
+
+const formatDateInputValue = (dateValue?: string | Date | null) => {
+  if (!dateValue) {
+    return "";
+  }
+
+  if (typeof dateValue === "string" && dateOnlyPattern.test(dateValue)) {
+    return dateValue;
+  }
+
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+
+const getCurrentDateInputValue = () => formatDateInputValue(new Date());
+
+const getWeekDayKeyForDate = (dateValue?: string | Date | null) => {
+  if (typeof dateValue === "string" && dateOnlyPattern.test(dateValue)) {
+    const [year, month, day] = dateValue.split("-").map(Number);
+    return WEEK_DAY_KEYS[new Date(year, month - 1, day).getDay()];
+  }
+
+  const date = dateValue ? new Date(dateValue) : new Date();
+  return WEEK_DAY_KEYS[Number.isNaN(date.getTime()) ? new Date().getDay() : date.getDay()];
+};
+
+const getWeekDayLabelForDate = (dateValue?: string | Date | null) => {
+  const dayKey = getWeekDayKeyForDate(dateValue);
+  return dayKey.charAt(0).toUpperCase() + dayKey.slice(1);
+};
+
+const getPreferredWeeklyLocation = (
+  user: UserListItem,
+  dateValue?: string | Date | null
+) => {
+  const selectedDayLocation = user.weeklyLocations?.[getWeekDayKeyForDate(dateValue)];
+  if (selectedDayLocation) {
+    return selectedDayLocation;
+  }
+
+  return WEEK_DAY_KEYS.map((day) => user.weeklyLocations?.[day]).find(
+    (location) =>
+      typeof location?.latitude === "number" &&
+      typeof location?.longitude === "number"
+  );
+};
+
+const getPreferredSite = (user: UserListItem, dateValue?: string | Date | null) =>
+  getPreferredWeeklyLocation(user, dateValue)?.site || user.site || "-";
+
 export default function UserManagementPage() {
   const queryClient = useQueryClient();
 
@@ -183,6 +252,7 @@ export default function UserManagementPage() {
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsUserId, setDetailsUserId] = useState<string | null>(null);
+  const [activityDate, setActivityDate] = useState("");
   const [reportsOpen, setReportsOpen] = useState(false);
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
 
@@ -207,6 +277,15 @@ export default function UserManagementPage() {
   const detailsQuery = useQuery({
     queryKey: QUERY_KEYS.userDetails(detailsUserId ?? undefined),
     queryFn: () => getUserDetails(detailsUserId as string),
+    enabled: Boolean(detailsOpen && detailsUserId),
+  });
+
+  const checklistsQuery = useQuery({
+    queryKey: QUERY_KEYS.userChecklists(detailsUserId ?? undefined),
+    queryFn: () =>
+      getUserChecklists({
+        user: detailsUserId as string,
+      }),
     enabled: Boolean(detailsOpen && detailsUserId),
   });
 
@@ -281,8 +360,25 @@ export default function UserManagementPage() {
   const reports = detailsQuery.data?.reports ?? [];
 
   const activities = useMemo<UserActivity[]>(() => {
-    const checklists = detailsQuery.data?.checklists ?? [];
-    return checklists.map((item) => {
+    const checklists = checklistsQuery.data ?? detailsQuery.data?.checklists ?? [];
+    const visibleChecklists = activityDate
+      ? checklists.filter((item) =>
+          [
+            formatDateInputValue(item.workDate),
+            formatDateInputValue(item.checkInAt),
+            formatDateInputValue(item.checkOutAt),
+          ].includes(activityDate)
+        )
+      : checklists;
+
+    return [...visibleChecklists]
+      .sort((first, second) => {
+        const firstTime = new Date(first.checkOutAt ?? first.checkInAt).getTime();
+        const secondTime = new Date(second.checkOutAt ?? second.checkInAt).getTime();
+
+        return firstTime - secondTime;
+      })
+      .map((item) => {
       const kind = getActivityKind(item.status, item.checkOutType);
 
       return {
@@ -292,7 +388,7 @@ export default function UserManagementPage() {
         kind,
       };
     });
-  }, [detailsQuery.data?.checklists]);
+  }, [activityDate, checklistsQuery.data, detailsQuery.data?.checklists]);
 
   return (
     <section className="space-y-6">
@@ -386,6 +482,7 @@ export default function UserManagementPage() {
                           className="rounded-full bg-[#d6e8db] text-[#228f45] hover:bg-[#cde1d4]"
                           onClick={() => {
                             setDetailsUserId(user._id);
+                            setActivityDate(getCurrentDateInputValue());
                             setDetailsOpen(true);
                           }}
                         >
@@ -443,10 +540,23 @@ export default function UserManagementPage() {
 
       <UserDetailsDialog
         open={detailsOpen}
-        onOpenChange={setDetailsOpen}
+        onOpenChange={(value) => {
+          setDetailsOpen(value);
+          if (!value) {
+            setActivityDate(getCurrentDateInputValue());
+          }
+        }}
         loading={detailsQuery.isLoading}
         user={selectedUser}
         activities={activities}
+        activityDate={activityDate}
+        onActivityDateChange={setActivityDate}
+        activitiesLoading={checklistsQuery.isFetching}
+        activitiesError={
+          checklistsQuery.isError
+            ? getApiMessage(checklistsQuery.error, "Unable to load activity history")
+            : null
+        }
         onViewReports={() => setReportsOpen(true)}
       />
 
@@ -530,6 +640,10 @@ function UserDetailsDialog({
   loading,
   user,
   activities,
+  activityDate,
+  onActivityDateChange,
+  activitiesLoading,
+  activitiesError,
   onViewReports,
 }: {
   open: boolean;
@@ -537,6 +651,10 @@ function UserDetailsDialog({
   loading: boolean;
   user?: UserListItem;
   activities: UserActivity[];
+  activityDate: string;
+  onActivityDateChange: (date: string) => void;
+  activitiesLoading: boolean;
+  activitiesError: string | null;
   onViewReports: () => void;
 }) {
   return (
@@ -552,6 +670,10 @@ function UserDetailsDialog({
           <UserDetailsBody
             user={user}
             activities={activities}
+            activityDate={activityDate}
+            onActivityDateChange={onActivityDateChange}
+            activitiesLoading={activitiesLoading}
+            activitiesError={activitiesError}
             onViewReports={onViewReports}
           />
         ) : (
@@ -575,10 +697,18 @@ function UserDetailsSkeleton() {
 function UserDetailsBody({
   user,
   activities,
+  activityDate,
+  onActivityDateChange,
+  activitiesLoading,
+  activitiesError,
   onViewReports,
 }: {
   user: UserListItem;
   activities: UserActivity[];
+  activityDate: string;
+  onActivityDateChange: (date: string) => void;
+  activitiesLoading: boolean;
+  activitiesError: string | null;
   onViewReports: () => void;
 }) {
   return (
@@ -587,32 +717,41 @@ function UserDetailsBody({
         <InfoCard label="User Name" value={user.name || "-"} icon={UserIcon} />
         <InfoCard label="User ID" value={user.userId || "-"} icon={IdCard} />
         <PasswordInfoCard value={user.textPassword || ""} />
-        <InfoCard label="Site" value={user.site || "-"} icon={Building2} />
+        <InfoCard
+          label={`Site (${getWeekDayLabelForDate(activityDate)})`}
+          value={getPreferredSite(user, activityDate)}
+          icon={Building2}
+        />
         <InfoCard label="On Shift" value={user.onShift || "-"} icon={Clock} />
         <InfoCard label="Off Shift" value={user.offShift || "-"} icon={Clock} />
       </div>
 
-      <ActivityHistoryCard user={user} onViewReports={onViewReports} />
-      <ActivitiesList activities={activities} />
+      <ActivityHistoryCard
+        user={user}
+        date={activityDate}
+        onViewReports={onViewReports}
+      />
+      <ActivitiesList
+        activities={activities}
+        date={activityDate}
+        loading={activitiesLoading}
+        error={activitiesError}
+        onDateChange={onActivityDateChange}
+      />
     </div>
   );
 }
 
 function ActivityHistoryCard({
   user,
+  date,
   onViewReports,
 }: {
   user: UserListItem;
+  date: string;
   onViewReports: () => void;
 }) {
-  const location =
-    user.weeklyLocations?.sunday ??
-    user.weeklyLocations?.monday ??
-    user.weeklyLocations?.tuesday ??
-    user.weeklyLocations?.wednesday ??
-    user.weeklyLocations?.thursday ??
-    user.weeklyLocations?.friday ??
-    user.weeklyLocations?.saturday;
+  const location = getPreferredWeeklyLocation(user, date);
   const latitude = location?.latitude;
   const longitude = location?.longitude;
   const hasLocation =
@@ -632,7 +771,9 @@ function ActivityHistoryCard({
       </div>
 
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-sm text-[#545454]">Check in Location</p>
+        <p className="text-sm text-[#545454]">
+          Check in Location ({getWeekDayLabelForDate(date)})
+        </p>
         {hasLocation ? (
           <p className="text-xs text-[#6f6f6f]">
             <MapPin className="mr-1 inline size-3" />
@@ -658,16 +799,67 @@ function ActivityHistoryCard({
   );
 }
 
-function ActivitiesList({ activities }: { activities: UserActivity[] }) {
-  if (activities.length === 0) {
-    return <p className="text-sm text-[#6f6f6f]">No recent activity found</p>;
-  }
+function ActivitiesList({
+  activities,
+  date,
+  loading,
+  error,
+  onDateChange,
+}: {
+  activities: UserActivity[];
+  date: string;
+  loading: boolean;
+  error: string | null;
+  onDateChange: (date: string) => void;
+}) {
+  const emptyMessage = date
+    ? "No activity found for this date"
+    : "No recent activity found";
 
   return (
-    <div className="max-h-[260px] space-y-2 overflow-y-auto pr-1">
-      {activities.map((item) => (
-        <ActivityRow key={item.id} item={item} />
-      ))}
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-[#2f2f2f]">Activity Records</p>
+        <div className="flex items-center gap-2">
+          <Input
+            type="date"
+            value={date}
+            onChange={(event) => onDateChange(event.target.value)}
+            className="h-9 w-[155px] rounded-lg border border-[#c8c8c8] bg-white px-2 text-sm"
+          />
+          {date ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => onDateChange("")}
+            >
+              Clear
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="rounded-lg border border-[#d6c8a0] bg-white px-3 py-6 text-center text-sm text-[#6f6f6f]">
+          Loading activity history...
+        </p>
+      ) : error ? (
+        <p className="rounded-lg border border-[#f1bdc5] bg-[#fdecef] px-3 py-6 text-center text-sm text-[#ff2b2b]">
+          {error}
+        </p>
+      ) : activities.length === 0 ? (
+        <p className="rounded-lg border border-[#d6c8a0] bg-white px-3 py-6 text-center text-sm text-[#6f6f6f]">
+          {emptyMessage}
+        </p>
+      ) : (
+        <div className="max-h-[260px] space-y-2 overflow-y-auto pr-1">
+          {activities.map((item) => (
+            <ActivityRow key={item.id} item={item} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -677,7 +869,7 @@ function ActivityRow({ item }: { item: UserActivity }) {
   const ActivityIcon = display.icon;
 
   return (
-    <div className="grid grid-cols-[1fr_auto_auto] items-center gap-4 rounded-lg border border-[#d6c8a0] bg-white px-3 py-2">
+    <div className="grid grid-cols-[minmax(0,1fr)_76px_104px] items-center gap-2 rounded-lg border border-[#d6c8a0] bg-white px-3 py-2">
       <div className="flex items-center gap-2 text-sm font-medium">
         <span
           className={`inline-flex size-5 items-center justify-center rounded-full ${display.className}`}
@@ -689,7 +881,9 @@ function ActivityRow({ item }: { item: UserActivity }) {
       <span className="text-sm font-medium text-[#2f2f2f]">
         {formatTimeLabel(item.time)}
       </span>
-      <span className="text-xs text-[#626262]">{formatDateLabel(item.time)}</span>
+      <span className="text-right text-xs text-[#626262]">
+        {formatDateLabel(item.time)}
+      </span>
     </div>
   );
 }

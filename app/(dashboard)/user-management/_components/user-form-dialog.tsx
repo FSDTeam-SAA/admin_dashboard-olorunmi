@@ -38,6 +38,7 @@ const WEEK_DAYS = [
 type WeekDayKey = (typeof WEEK_DAYS)[number]["key"];
 type WeeklyLocationFormRow = {
   key: WeekDayKey;
+  site: string;
   latitude: string;
   longitude: string;
 };
@@ -46,7 +47,7 @@ export type UserFormPayload = {
   name: string;
   userId: string;
   password: string;
-  site: string;
+  site?: string;
   onShift: string;
   offShift: string;
   weeklyLocations: WeeklyLocations;
@@ -72,7 +73,6 @@ export function UserFormDialog({
   const [name, setName] = useState(initialValues?.name ?? "");
   const [userId, setUserId] = useState(initialValues?.userId ?? "");
   const [password, setPassword] = useState("");
-  const [site, setSite] = useState(initialValues?.site ?? "");
   const [onShift, setOnShift] = useState(initialValues?.onShift ?? "");
   const [offShift, setOffShift] = useState(initialValues?.offShift ?? "");
   const [weeklyLocationRows, setWeeklyLocationRows] = useState<WeeklyLocationFormRow[]>(() =>
@@ -141,7 +141,7 @@ export function UserFormDialog({
               name,
               userId,
               password,
-              site,
+              site: getFirstWeeklyLocationSite(weeklyLocations),
               onShift,
               offShift,
               weeklyLocations,
@@ -179,13 +179,6 @@ export function UserFormDialog({
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             required={!initialValues}
-          />
-
-          <IconInput
-            icon={Building2}
-            placeholder="Site"
-            value={site}
-            onChange={(event) => setSite(event.target.value)}
           />
 
           <div className="grid grid-cols-2 gap-2">
@@ -271,6 +264,7 @@ function buildDefaultWeeklyLocationRows(initialValues: UserListItem | null) {
 
     return {
       key: weekDay.key,
+      site: savedLocation?.site ?? initialValues?.site ?? "",
       latitude: String(savedLocation?.latitude ?? fallbackLatitude),
       longitude: String(savedLocation?.longitude ?? fallbackLongitude),
     };
@@ -305,12 +299,24 @@ function rowsToWeeklyLocations(rows: WeeklyLocationFormRow[]): WeeklyLocations {
 
     weeklyLocations[row.key] = {
       day: dayLabel,
+      site: row.site.trim(),
       latitude: Number(row.latitude),
       longitude: Number(row.longitude),
     };
 
     return weeklyLocations;
   }, {} as WeeklyLocations);
+}
+
+function getFirstWeeklyLocationSite(weeklyLocations: WeeklyLocations) {
+  for (const weekDay of WEEK_DAYS) {
+    const site = weeklyLocations[weekDay.key]?.site?.trim();
+    if (site) {
+      return site;
+    }
+  }
+
+  return "";
 }
 
 function ProfilePhotoPicker({
@@ -370,7 +376,7 @@ function WeeklyLocationsInput({
 }) {
   const updateRow = (
     rowIndex: number,
-    field: keyof Pick<WeeklyLocationFormRow, "latitude" | "longitude">,
+    field: keyof Pick<WeeklyLocationFormRow, "site" | "latitude" | "longitude">,
     value: string
   ) => {
     onRowsChange(
@@ -395,7 +401,7 @@ function WeeklyLocationsInput({
             <div
               key={row.key}
               className={cn(
-                "grid gap-2 rounded-lg border p-2 md:grid-cols-[minmax(260px,1fr)_minmax(130px,160px)_minmax(130px,160px)]",
+                "grid gap-2 rounded-lg border p-2 md:grid-cols-[minmax(120px,0.75fr)_minmax(160px,1fr)_minmax(120px,150px)_minmax(120px,150px)]",
                 "cursor-pointer",
                 isActive
                   ? "border-[#a79663] bg-white"
@@ -412,6 +418,15 @@ function WeeklyLocationsInput({
                   {WEEK_DAYS[index].label}
                 </span>
               </button>
+
+              <IconInput
+                icon={Building2}
+                placeholder="Site"
+                value={row.site}
+                onChange={(event) =>
+                  updateRow(index, "site", event.target.value)
+                }
+              />
 
               <Input
                 placeholder="Latitude"
