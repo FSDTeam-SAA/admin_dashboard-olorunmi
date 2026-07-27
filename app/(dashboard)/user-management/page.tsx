@@ -1163,10 +1163,10 @@ async function downloadReportPdf(
     doc.setFontSize(9);
     doc.text(
       [
-        "Head Office: 44 Victoria Street, Toronto, ON",
-        "Phone: +1 (416) 000-0000",
-        "Email: info@regalsecurity.ca",
-        "Web: www.regalsecurity.ca",
+        "Head Office:  1841-300, 85 Shawville Blvd, SW,\nCalgary, AB T2Y 3W5",
+        "Phone:  T 403.457.4734 | F 403.457.4738",
+        "Email:  info@regalsecurityservices.ca",
+        "Web:  www.regalsecurity.ca",
       ],
       48,
       26
