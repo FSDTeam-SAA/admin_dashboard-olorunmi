@@ -39,6 +39,8 @@ type WeekDayKey = (typeof WEEK_DAYS)[number]["key"];
 type WeeklyLocationFormRow = {
   key: WeekDayKey;
   site: string;
+  onShift: string;
+  offShift: string;
   latitude: string;
   longitude: string;
 };
@@ -73,8 +75,6 @@ export function UserFormDialog({
   const [name, setName] = useState(initialValues?.name ?? "");
   const [userId, setUserId] = useState(initialValues?.userId ?? "");
   const [password, setPassword] = useState("");
-  const [onShift, setOnShift] = useState(initialValues?.onShift ?? "");
-  const [offShift, setOffShift] = useState(initialValues?.offShift ?? "");
   const [weeklyLocationRows, setWeeklyLocationRows] = useState<WeeklyLocationFormRow[]>(() =>
     buildDefaultWeeklyLocationRows(initialValues)
   );
@@ -142,8 +142,8 @@ export function UserFormDialog({
               userId,
               password,
               site: getFirstWeeklyLocationSite(weeklyLocations),
-              onShift,
-              offShift,
+              onShift: getFirstWeeklyLocationShift(weeklyLocations, "onShift"),
+              offShift: getFirstWeeklyLocationShift(weeklyLocations, "offShift"),
               weeklyLocations,
               defaultRadius: Number.isNaN(parsedRadius) ? 100 : parsedRadius,
               profilePhoto,
@@ -180,25 +180,6 @@ export function UserFormDialog({
             onChange={(event) => setPassword(event.target.value)}
             required={!initialValues}
           />
-
-          <div className="grid grid-cols-2 gap-2">
-            <IconInput
-              icon={Clock}
-              type="time"
-              aria-label="On Shift"
-              title="On Shift"
-              value={onShift}
-              onChange={(event) => setOnShift(event.target.value)}
-            />
-            <IconInput
-              icon={Clock}
-              type="time"
-              aria-label="Off Shift"
-              title="Off Shift"
-              value={offShift}
-              onChange={(event) => setOffShift(event.target.value)}
-            />
-          </div>
 
           <WeeklyLocationsInput
             rows={weeklyLocationRows}
@@ -265,6 +246,8 @@ function buildDefaultWeeklyLocationRows(initialValues: UserListItem | null) {
     return {
       key: weekDay.key,
       site: savedLocation?.site ?? initialValues?.site ?? "",
+      onShift: savedLocation?.onShift ?? initialValues?.onShift ?? "",
+      offShift: savedLocation?.offShift ?? initialValues?.offShift ?? "",
       latitude: String(savedLocation?.latitude ?? fallbackLatitude),
       longitude: String(savedLocation?.longitude ?? fallbackLongitude),
     };
@@ -300,6 +283,8 @@ function rowsToWeeklyLocations(rows: WeeklyLocationFormRow[]): WeeklyLocations {
     weeklyLocations[row.key] = {
       day: dayLabel,
       site: row.site.trim(),
+      onShift: row.onShift.trim(),
+      offShift: row.offShift.trim(),
       latitude: Number(row.latitude),
       longitude: Number(row.longitude),
     };
@@ -313,6 +298,20 @@ function getFirstWeeklyLocationSite(weeklyLocations: WeeklyLocations) {
     const site = weeklyLocations[weekDay.key]?.site?.trim();
     if (site) {
       return site;
+    }
+  }
+
+  return "";
+}
+
+function getFirstWeeklyLocationShift(
+  weeklyLocations: WeeklyLocations,
+  field: "onShift" | "offShift"
+) {
+  for (const weekDay of WEEK_DAYS) {
+    const shift = weeklyLocations[weekDay.key]?.[field]?.trim();
+    if (shift) {
+      return shift;
     }
   }
 
@@ -376,7 +375,7 @@ function WeeklyLocationsInput({
 }) {
   const updateRow = (
     rowIndex: number,
-    field: keyof Pick<WeeklyLocationFormRow, "site" | "latitude" | "longitude">,
+    field: keyof Pick<WeeklyLocationFormRow, "site" | "onShift" | "offShift" | "latitude" | "longitude">,
     value: string
   ) => {
     onRowsChange(
@@ -401,7 +400,7 @@ function WeeklyLocationsInput({
             <div
               key={row.key}
               className={cn(
-                "grid gap-2 rounded-lg border p-2 md:grid-cols-[minmax(120px,0.75fr)_minmax(160px,1fr)_minmax(120px,150px)_minmax(120px,150px)]",
+                "grid gap-2 rounded-lg border p-2 md:grid-cols-[minmax(110px,0.65fr)_minmax(130px,1fr)_minmax(110px,0.75fr)_minmax(110px,0.75fr)_minmax(96px,120px)_minmax(96px,120px)]",
                 "cursor-pointer",
                 isActive
                   ? "border-[#a79663] bg-white"
@@ -425,6 +424,28 @@ function WeeklyLocationsInput({
                 value={row.site}
                 onChange={(event) =>
                   updateRow(index, "site", event.target.value)
+                }
+              />
+
+              <IconInput
+                icon={Clock}
+                type="time"
+                aria-label="On Shift"
+                title="On Shift"
+                value={row.onShift}
+                onChange={(event) =>
+                  updateRow(index, "onShift", event.target.value)
+                }
+              />
+
+              <IconInput
+                icon={Clock}
+                type="time"
+                aria-label="Off Shift"
+                title="Off Shift"
+                value={row.offShift}
+                onChange={(event) =>
+                  updateRow(index, "offShift", event.target.value)
                 }
               />
 
