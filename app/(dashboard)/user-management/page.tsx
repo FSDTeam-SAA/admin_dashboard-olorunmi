@@ -80,6 +80,15 @@ const WEEK_DAY_KEYS = [
   "friday",
   "saturday",
 ] as const;
+const WEEK_DAY_FALLBACK_KEYS = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+] as const;
 
 type UserActivity = {
   id: string;
@@ -229,15 +238,18 @@ const getPreferredWeeklyLocation = (
     return selectedDayLocation;
   }
 
-  return WEEK_DAY_KEYS.map((day) => user.weeklyLocations?.[day]).find(
+  return WEEK_DAY_FALLBACK_KEYS.map((day) => user.weeklyLocations?.[day]).find(
     (location) =>
+      !location?.isWeekend &&
       typeof location?.latitude === "number" &&
       typeof location?.longitude === "number"
   );
 };
 
 const getPreferredSite = (user: UserListItem, dateValue?: string | Date | null) =>
-  getPreferredWeeklyLocation(user, dateValue)?.site || user.site || "-";
+  getPreferredWeeklyLocation(user, dateValue)?.isWeekend
+    ? "Weekend"
+    : getPreferredWeeklyLocation(user, dateValue)?.site || user.site || "-";
 
 export default function UserManagementPage() {
   const queryClient = useQueryClient();

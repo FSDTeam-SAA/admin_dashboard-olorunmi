@@ -5,6 +5,8 @@ import {
   Building2,
   CalendarDays,
   Clock,
+  Eye,
+  EyeOff,
   IdCard,
   Lock,
   MapPin,
@@ -16,6 +18,7 @@ import { toast } from "sonner";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn, getUserInitials } from "@/lib/utils";
@@ -26,13 +29,13 @@ import { OpenStreetMapPicker } from "./open-street-map-picker";
 const DEFAULT_LATITUDE = 23.8103;
 const DEFAULT_LONGITUDE = 90.4125;
 const WEEK_DAYS = [
-  { key: "sunday", label: "Sunday" },
   { key: "monday", label: "Monday" },
   { key: "tuesday", label: "Tuesday" },
   { key: "wednesday", label: "Wednesday" },
   { key: "thursday", label: "Thursday" },
   { key: "friday", label: "Friday" },
   { key: "saturday", label: "Saturday" },
+  { key: "sunday", label: "Sunday" },
 ] as const;
 
 type WeekDayKey = (typeof WEEK_DAYS)[number]["key"];
@@ -43,6 +46,7 @@ type WeeklyLocationFormRow = {
   offShift: string;
   latitude: string;
   longitude: string;
+  isWeekend: boolean;
 };
 
 export type UserFormPayload = {
@@ -75,6 +79,7 @@ export function UserFormDialog({
   const [name, setName] = useState(initialValues?.name ?? "");
   const [userId, setUserId] = useState(initialValues?.userId ?? "");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [weeklyLocationRows, setWeeklyLocationRows] = useState<WeeklyLocationFormRow[]>(() =>
     buildDefaultWeeklyLocationRows(initialValues)
   );
@@ -93,14 +98,22 @@ export function UserFormDialog({
   const activeLocation = weeklyLocationRows[activeLocationIndex] ?? weeklyLocationRows[0];
 
   const parsedLatitude = useMemo(() => {
-    const value = Number(activeLocation?.latitude);
+    const firstWorkingLocation =
+      weeklyLocationRows.find((row) => !row.isWeekend) ?? weeklyLocationRows[0];
+    const value = Number(
+      activeLocation?.isWeekend ? firstWorkingLocation?.latitude : activeLocation?.latitude
+    );
     return Number.isNaN(value) ? DEFAULT_LATITUDE : value;
-  }, [activeLocation?.latitude]);
+  }, [activeLocation?.isWeekend, activeLocation?.latitude, weeklyLocationRows]);
 
   const parsedLongitude = useMemo(() => {
-    const value = Number(activeLocation?.longitude);
+    const firstWorkingLocation =
+      weeklyLocationRows.find((row) => !row.isWeekend) ?? weeklyLocationRows[0];
+    const value = Number(
+      activeLocation?.isWeekend ? firstWorkingLocation?.longitude : activeLocation?.longitude
+    );
     return Number.isNaN(value) ? DEFAULT_LONGITUDE : value;
-  }, [activeLocation?.longitude]);
+  }, [activeLocation?.isWeekend, activeLocation?.longitude, weeklyLocationRows]);
 
   useEffect(() => {
     return () => {
@@ -112,7 +125,7 @@ export function UserFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] !max-w-[920px] overflow-y-auto rounded-2xl p-5">
+      <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl p-5 sm:w-[80vw] sm:!max-w-[1200px]">
         <DialogHeader>
           <DialogTitle>{initialValues ? "Update user" : "Add New user"}</DialogTitle>
         </DialogHeader>
@@ -172,9 +185,9 @@ export function UserFormDialog({
             required
           />
 
-          <IconInput
-            icon={Lock}
-            type="password"
+          <PasswordInput
+            visible={passwordVisible}
+            onVisibleChange={setPasswordVisible}
             placeholder={initialValues ? "New Password (optional)" : "Password"}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
@@ -199,6 +212,11 @@ export function UserFormDialog({
             latitude={parsedLatitude}
             longitude={parsedLongitude}
             onChange={(nextLatitude, nextLongitude) => {
+              if (activeLocation?.isWeekend) {
+                toast.error("Weekend rows do not need a map location");
+                return;
+              }
+
               setWeeklyLocationRows((currentRows) =>
                 currentRows.map((row, index) =>
                   index === activeLocationIndex
@@ -250,12 +268,17 @@ function buildDefaultWeeklyLocationRows(initialValues: UserListItem | null) {
       offShift: savedLocation?.offShift ?? initialValues?.offShift ?? "",
       latitude: String(savedLocation?.latitude ?? fallbackLatitude),
       longitude: String(savedLocation?.longitude ?? fallbackLongitude),
+      isWeekend: savedLocation?.isWeekend ?? false,
     };
   });
 }
 
 function validateWeeklyLocationRows(rows: WeeklyLocationFormRow[]) {
   for (const row of rows) {
+    if (row.isWeekend) {
+      continue;
+    }
+
     const dayLabel = WEEK_DAYS.find((weekDay) => weekDay.key === row.key)?.label ?? row.key;
     const latitudeValue = Number(row.latitude);
     const longitudeValue = Number(row.longitude);
@@ -282,11 +305,12 @@ function rowsToWeeklyLocations(rows: WeeklyLocationFormRow[]): WeeklyLocations {
 
     weeklyLocations[row.key] = {
       day: dayLabel,
-      site: row.site.trim(),
-      onShift: row.onShift.trim(),
-      offShift: row.offShift.trim(),
-      latitude: Number(row.latitude),
-      longitude: Number(row.longitude),
+      site: row.isWeekend ? "" : row.site.trim(),
+      onShift: row.isWeekend ? "" : row.onShift.trim(),
+      offShift: row.isWeekend ? "" : row.offShift.trim(),
+      latitude: row.isWeekend ? null : Number(row.latitude),
+      longitude: row.isWeekend ? null : Number(row.longitude),
+      isWeekend: row.isWeekend,
     };
 
     return weeklyLocations;
@@ -295,6 +319,8 @@ function rowsToWeeklyLocations(rows: WeeklyLocationFormRow[]): WeeklyLocations {
 
 function getFirstWeeklyLocationSite(weeklyLocations: WeeklyLocations) {
   for (const weekDay of WEEK_DAYS) {
+    if (weeklyLocations[weekDay.key]?.isWeekend) continue;
+
     const site = weeklyLocations[weekDay.key]?.site?.trim();
     if (site) {
       return site;
@@ -309,6 +335,8 @@ function getFirstWeeklyLocationShift(
   field: "onShift" | "offShift"
 ) {
   for (const weekDay of WEEK_DAYS) {
+    if (weeklyLocations[weekDay.key]?.isWeekend) continue;
+
     const shift = weeklyLocations[weekDay.key]?.[field]?.trim();
     if (shift) {
       return shift;
@@ -375,8 +403,11 @@ function WeeklyLocationsInput({
 }) {
   const updateRow = (
     rowIndex: number,
-    field: keyof Pick<WeeklyLocationFormRow, "site" | "onShift" | "offShift" | "latitude" | "longitude">,
-    value: string
+    field: keyof Pick<
+      WeeklyLocationFormRow,
+      "site" | "onShift" | "offShift" | "latitude" | "longitude" | "isWeekend"
+    >,
+    value: string | boolean
   ) => {
     onRowsChange(
       rows.map((row, index) =>
@@ -395,16 +426,21 @@ function WeeklyLocationsInput({
       <div className="space-y-2">
         {rows.map((row, index) => {
           const isActive = index === activeIndex;
+          const isWeekend = row.isWeekend;
 
           return (
             <div
               key={row.key}
               className={cn(
-                "grid gap-2 rounded-lg border p-2 md:grid-cols-[minmax(110px,0.65fr)_minmax(130px,1fr)_minmax(110px,0.75fr)_minmax(110px,0.75fr)_minmax(96px,120px)_minmax(96px,120px)]",
+                "grid gap-2 rounded-lg border p-2 md:grid-cols-[minmax(120px,0.7fr)_minmax(260px,1.6fr)_minmax(120px,0.75fr)_minmax(120px,0.75fr)_minmax(110px,0.7fr)_minmax(110px,0.7fr)]",
                 "cursor-pointer",
                 isActive
-                  ? "border-[#a79663] bg-white"
-                  : "border-transparent bg-[#ececec]"
+                  ? isWeekend
+                    ? "border-[#a79663] bg-[#eeeeee] text-[#777777]"
+                    : "border-[#a79663] bg-white"
+                  : isWeekend
+                    ? "border-transparent bg-[#eeeeee] text-[#777777]"
+                    : "border-transparent bg-[#ececec]"
               )}
             >
               <button
@@ -413,29 +449,41 @@ function WeeklyLocationsInput({
                 onClick={() => onActiveIndexChange(index)}
               >
                 <MapPin className="size-4 shrink-0 text-[#8f7f52]" />
-                <span className="truncate">
-                  {WEEK_DAYS[index].label}
-                </span>
+                <span>{WEEK_DAYS[index].label}</span>
               </button>
 
-              <IconInput
-                icon={Building2}
-                placeholder="Site"
-                value={row.site}
-                onChange={(event) =>
-                  updateRow(index, "site", event.target.value)
-                }
-              />
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                <IconInput
+                  icon={Building2}
+                  placeholder={isWeekend ? "-" : "Site"}
+                  value={isWeekend ? "" : row.site}
+                  onChange={(event) =>
+                    updateRow(index, "site", event.target.value)
+                  }
+                  disabled={isWeekend}
+                />
+                <label className="flex h-11 items-center gap-2 rounded-xl bg-[#e7e7e7] px-3 text-xs font-medium text-[#4f4f4f]">
+                  <Checkbox
+                    checked={isWeekend}
+                    aria-label={`Mark ${WEEK_DAYS[index].label} as weekend`}
+                    onCheckedChange={(checked) =>
+                      updateRow(index, "isWeekend", checked === true)
+                    }
+                  />
+                  Weekend
+                </label>
+              </div>
 
               <IconInput
                 icon={Clock}
                 type="time"
                 aria-label="On Shift"
                 title="On Shift"
-                value={row.onShift}
+                value={isWeekend ? "" : row.onShift}
                 onChange={(event) =>
                   updateRow(index, "onShift", event.target.value)
                 }
+                disabled={isWeekend}
               />
 
               <IconInput
@@ -443,32 +491,59 @@ function WeeklyLocationsInput({
                 type="time"
                 aria-label="Off Shift"
                 title="Off Shift"
-                value={row.offShift}
+                value={isWeekend ? "" : row.offShift}
                 onChange={(event) =>
                   updateRow(index, "offShift", event.target.value)
                 }
+                disabled={isWeekend}
               />
 
               <Input
-                placeholder="Latitude"
-                value={row.latitude}
+                placeholder={isWeekend ? "-" : "Latitude"}
+                value={isWeekend ? "" : row.latitude}
                 onChange={(event) =>
                   updateRow(index, "latitude", event.target.value)
                 }
-                required
+                required={!isWeekend}
+                disabled={isWeekend}
               />
               <Input
-                placeholder="Longitude"
-                value={row.longitude}
+                placeholder={isWeekend ? "-" : "Longitude"}
+                value={isWeekend ? "" : row.longitude}
                 onChange={(event) =>
                   updateRow(index, "longitude", event.target.value)
                 }
-                required
+                required={!isWeekend}
+                disabled={isWeekend}
               />
             </div>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function PasswordInput({
+  visible,
+  onVisibleChange,
+  ...props
+}: ComponentProps<typeof Input> & {
+  visible: boolean;
+  onVisibleChange: (visible: boolean) => void;
+}) {
+  return (
+    <div className="relative">
+      <Lock className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#9a9a9a]" />
+      <Input className="pr-11 pl-9" type={visible ? "text" : "password"} {...props} />
+      <button
+        type="button"
+        aria-label={visible ? "Hide password" : "Show password"}
+        className="absolute top-1/2 right-3 -translate-y-1/2 text-[#6f6f6f] hover:text-[#1f1f1f]"
+        onClick={() => onVisibleChange(!visible)}
+      >
+        {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+      </button>
     </div>
   );
 }

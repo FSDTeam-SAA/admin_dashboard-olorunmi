@@ -9,8 +9,9 @@ export type LocationPoint = {
   site?: string;
   onShift?: string;
   offShift?: string;
-  latitude: number;
-  longitude: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  isWeekend?: boolean;
 };
 
 export type WeeklyLocations = {
