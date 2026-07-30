@@ -12,6 +12,7 @@ export type LocationPoint = {
   latitude?: number | null;
   longitude?: number | null;
   isWeekend?: boolean;
+  isOff?: boolean;
 };
 
 export type WeeklyLocations = {

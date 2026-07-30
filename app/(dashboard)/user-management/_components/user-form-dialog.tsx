@@ -213,7 +213,7 @@ export function UserFormDialog({
             longitude={parsedLongitude}
             onChange={(nextLatitude, nextLongitude) => {
               if (activeLocation?.isWeekend) {
-                toast.error("Weekend rows do not need a map location");
+                toast.error("Off days do not need a map location");
                 return;
               }
 
@@ -268,7 +268,7 @@ function buildDefaultWeeklyLocationRows(initialValues: UserListItem | null) {
       offShift: savedLocation?.offShift ?? initialValues?.offShift ?? "",
       latitude: String(savedLocation?.latitude ?? fallbackLatitude),
       longitude: String(savedLocation?.longitude ?? fallbackLongitude),
-      isWeekend: savedLocation?.isWeekend ?? false,
+      isWeekend: savedLocation?.isWeekend ?? savedLocation?.isOff ?? false,
     };
   });
 }
@@ -305,11 +305,11 @@ function rowsToWeeklyLocations(rows: WeeklyLocationFormRow[]): WeeklyLocations {
 
     weeklyLocations[row.key] = {
       day: dayLabel,
-      site: row.isWeekend ? "" : row.site.trim(),
-      onShift: row.isWeekend ? "" : row.onShift.trim(),
-      offShift: row.isWeekend ? "" : row.offShift.trim(),
-      latitude: row.isWeekend ? null : Number(row.latitude),
-      longitude: row.isWeekend ? null : Number(row.longitude),
+      site: row.site.trim(),
+      onShift: row.onShift.trim(),
+      offShift: row.offShift.trim(),
+      latitude: row.latitude === "" ? null : Number(row.latitude),
+      longitude: row.longitude === "" ? null : Number(row.longitude),
       isWeekend: row.isWeekend,
     };
 
@@ -465,12 +465,12 @@ function WeeklyLocationsInput({
                 <label className="flex h-11 items-center gap-2 rounded-xl bg-[#e7e7e7] px-3 text-xs font-medium text-[#4f4f4f]">
                   <Checkbox
                     checked={isWeekend}
-                    aria-label={`Mark ${WEEK_DAYS[index].label} as weekend`}
+                    aria-label={`Mark ${WEEK_DAYS[index].label} as off`}
                     onCheckedChange={(checked) =>
                       updateRow(index, "isWeekend", checked === true)
                     }
                   />
-                  Weekend
+                  Off
                 </label>
               </div>
 

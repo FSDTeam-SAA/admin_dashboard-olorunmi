@@ -80,6 +80,15 @@ export default function OpenStreetMapPickerClient({
     onChange(nextLatitude, nextLongitude);
   };
 
+  const handleSearchQueryChange = (value: string) => {
+    setSearchQuery(value);
+
+    if (value.trim().length < 3) {
+      setSuggestions([]);
+      setSearchError("");
+    }
+  };
+
   const fetchLocationSuggestions = async (query: string, limit = 5) => {
     const response = await fetch(
       `https://nominatim.openstreetmap.org/search?format=json&limit=${limit}&q=${encodeURIComponent(query)}`
@@ -124,8 +133,6 @@ export default function OpenStreetMapPickerClient({
     const query = searchQuery.trim();
 
     if (query.length < 3) {
-      setSuggestions([]);
-      setSearchError("");
       return;
     }
 
@@ -173,7 +180,7 @@ export default function OpenStreetMapPickerClient({
             className="pl-9"
             placeholder="Search location"
             value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
+            onChange={(event) => handleSearchQueryChange(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
