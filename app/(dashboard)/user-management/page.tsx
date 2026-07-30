@@ -68,7 +68,7 @@ import {
 } from "@/lib/api";
 import { API_BASE_URL, QUERY_KEYS } from "@/lib/constants";
 import { formatDateLabel, getUserInitials } from "@/lib/utils";
-import type { ReportItem, UserListItem } from "@/types/api";
+import type { LocationPoint, ReportItem, UserListItem } from "@/types/api";
 
 const PAGE_LIMIT = 8;
 const WEEK_DAY_KEYS = [
@@ -229,6 +229,9 @@ const getWeekDayLabelForDate = (dateValue?: string | Date | null) => {
   return dayKey.charAt(0).toUpperCase() + dayKey.slice(1);
 };
 
+const isOffDayLocation = (location?: LocationPoint) =>
+  location?.isWeekend === true || location?.isOff === true;
+
 const getPreferredWeeklyLocation = (
   user: UserListItem,
   dateValue?: string | Date | null
@@ -240,16 +243,27 @@ const getPreferredWeeklyLocation = (
 
   return WEEK_DAY_FALLBACK_KEYS.map((day) => user.weeklyLocations?.[day]).find(
     (location) =>
-      !location?.isWeekend &&
+      !isOffDayLocation(location) &&
       typeof location?.latitude === "number" &&
       typeof location?.longitude === "number"
   );
 };
 
-const getPreferredSite = (user: UserListItem, dateValue?: string | Date | null) =>
-  getPreferredWeeklyLocation(user, dateValue)?.isWeekend
-    ? "Weekend"
-    : getPreferredWeeklyLocation(user, dateValue)?.site || user.site || "-";
+const getPreferredSite = (user: UserListItem, dateValue?: string | Date | null) => {
+  const location = getPreferredWeeklyLocation(user, dateValue);
+
+  return isOffDayLocation(location) ? "Off" : location?.site || user.site || "-";
+};
+
+const getPreferredShift = (
+  user: UserListItem,
+  field: "onShift" | "offShift",
+  dateValue?: string | Date | null
+) => {
+  const location = getPreferredWeeklyLocation(user, dateValue);
+
+  return isOffDayLocation(location) ? "-" : location?.[field] || user[field] || "-";
+};
 
 export default function UserManagementPage() {
   const queryClient = useQueryClient();
@@ -734,8 +748,16 @@ function UserDetailsBody({
           value={getPreferredSite(user, activityDate)}
           icon={Building2}
         />
-        <InfoCard label="On Shift" value={user.onShift || "-"} icon={Clock} />
-        <InfoCard label="Off Shift" value={user.offShift || "-"} icon={Clock} />
+        <InfoCard
+          label="On Shift"
+          value={getPreferredShift(user, "onShift", activityDate)}
+          icon={Clock}
+        />
+        <InfoCard
+          label="Off Shift"
+          value={getPreferredShift(user, "offShift", activityDate)}
+          icon={Clock}
+        />
       </div>
 
       <ActivityHistoryCard
@@ -766,7 +788,9 @@ function ActivityHistoryCard({
   const location = getPreferredWeeklyLocation(user, date);
   const latitude = location?.latitude;
   const longitude = location?.longitude;
+  const isOffDay = isOffDayLocation(location);
   const hasLocation =
+    !isOffDay &&
     typeof latitude === "number" &&
     typeof longitude === "number" &&
     Number.isFinite(latitude) &&
@@ -804,7 +828,7 @@ function ActivityHistoryCard({
         />
       ) : (
         <div className="flex h-32.5 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#dedede,#f5f5f5)] text-sm text-[#6f6f6f]">
-          No location set for this user
+          {isOffDay ? "Off day" : "No location set for this user"}
         </div>
       )}
     </div>
@@ -1178,7 +1202,7 @@ async function downloadReportPdf(
         "Head Office:  1841-300, 85 Shawville Blvd, SW,\nCalgary, AB T2Y 3W5",
         "Phone:  T 403.457.4734 | F 403.457.4738",
         "Email:  info@regalsecurityservices.ca",
-        "Web:  www.regalsecurity.ca",
+        "Web:  www.regalsecurityservices.ca",
       ],
       48,
       26
