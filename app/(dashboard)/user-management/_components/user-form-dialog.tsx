@@ -231,7 +231,7 @@ export function UserFormDialog({
             }}
           />
 
-          <p className="text-xs text-[#6f6f6f]">
+          <p className="text-xs text-text-tertiary">
             Click or drag the marker to set the user&apos;s location.
           </p>
 
@@ -358,7 +358,7 @@ function ProfilePhotoPicker({
   return (
     <div className="flex justify-center">
       <div className="relative">
-        <Avatar className="size-[72px] border border-[#d8d8d8]">
+        <Avatar className="size-[72px] border border-border">
           <AvatarImage src={imageUrl} alt={name || "User"} />
           <AvatarFallback>{getUserInitials(name || "User")}</AvatarFallback>
         </Avatar>
