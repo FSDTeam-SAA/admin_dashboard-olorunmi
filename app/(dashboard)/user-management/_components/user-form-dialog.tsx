@@ -417,9 +417,9 @@ function WeeklyLocationsInput({
   };
 
   return (
-    <div className="space-y-2 rounded-xl border border-[#dfdfdf] bg-[#f7f7f7] p-2">
-      <div className="flex items-center gap-2 px-1 text-sm font-semibold text-[#2f2f2f]">
-        <CalendarDays className="size-4 text-[#8f7f52]" />
+    <div className="space-y-2 rounded-xl border border-border bg-secondary-bg/30 p-3">
+      <div className="flex items-center gap-2 px-1 text-sm font-semibold text-text-primary">
+        <CalendarDays className="size-4 text-blue-600 dark:text-blue-400" />
         7 day locations
       </div>
 
@@ -433,22 +433,22 @@ function WeeklyLocationsInput({
               key={row.key}
               className={cn(
                 "grid gap-2 rounded-lg border p-2 md:grid-cols-[minmax(120px,0.7fr)_minmax(260px,1.6fr)_minmax(120px,0.75fr)_minmax(120px,0.75fr)_minmax(110px,0.7fr)_minmax(110px,0.7fr)]",
-                "cursor-pointer",
+                "cursor-pointer transition-colors",
                 isActive
                   ? isWeekend
-                    ? "border-[#a79663] bg-[#eeeeee] text-[#777777]"
-                    : "border-[#a79663] bg-white"
+                    ? "border-blue-600/60 bg-secondary-bg text-text-tertiary"
+                    : "border-blue-600 bg-blue-50/50 dark:border-blue-500 dark:bg-blue-950/30"
                   : isWeekend
-                    ? "border-transparent bg-[#eeeeee] text-[#777777]"
-                    : "border-transparent bg-[#ececec]"
+                    ? "border-border/50 bg-secondary-bg/50 text-text-tertiary"
+                    : "border-border bg-card"
               )}
             >
               <button
                 type="button"
-                className="flex min-h-10 items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-[#2f2f2f] hover:bg-[#f8f6ef]"
+                className="flex min-h-10 items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-text-primary hover:bg-secondary-bg"
                 onClick={() => onActiveIndexChange(index)}
               >
-                <MapPin className="size-4 shrink-0 text-[#8f7f52]" />
+                <MapPin className="size-4 shrink-0 text-blue-600 dark:text-blue-400" />
                 <span>{WEEK_DAYS[index].label}</span>
               </button>
 
@@ -462,7 +462,7 @@ function WeeklyLocationsInput({
                   }
                   disabled={isWeekend}
                 />
-                <label className="flex h-11 items-center gap-2 rounded-xl bg-[#e7e7e7] px-3 text-xs font-medium text-[#4f4f4f]">
+                <label className="flex h-10 items-center gap-2 rounded-lg border border-border bg-secondary-bg/60 px-3 text-xs font-medium text-text-secondary">
                   <Checkbox
                     checked={isWeekend}
                     aria-label={`Mark ${WEEK_DAYS[index].label} as off`}
@@ -534,12 +534,12 @@ function PasswordInput({
 }) {
   return (
     <div className="relative">
-      <Lock className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#9a9a9a]" />
+      <Lock className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500 dark:text-slate-300" />
       <Input className="pr-11 pl-9" type={visible ? "text" : "password"} {...props} />
       <button
         type="button"
         aria-label={visible ? "Hide password" : "Show password"}
-        className="absolute top-1/2 right-3 -translate-y-1/2 text-[#6f6f6f] hover:text-[#1f1f1f]"
+        className="absolute top-1/2 right-3 -translate-y-1/2 text-slate-500 hover:text-text-primary dark:text-slate-400"
         onClick={() => onVisibleChange(!visible)}
       >
         {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -555,7 +555,7 @@ function IconInput({
 }: ComponentProps<typeof Input> & { icon: LucideIcon }) {
   return (
     <div className="relative">
-      <Icon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#9a9a9a]" />
+      <Icon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500 dark:text-slate-300" />
       <Input className={`pl-9 ${className ?? ""}`} {...props} />
     </div>
   );

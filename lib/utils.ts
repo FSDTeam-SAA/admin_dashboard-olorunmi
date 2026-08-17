@@ -57,16 +57,18 @@ export function decodeJwtExpiry(token?: string | null) {
   }
 }
 
-export function buildPagination(currentPage: number, totalPages: number) {
-  const pages = new Set<number>();
-  pages.add(1);
-  pages.add(totalPages);
-
-  for (let value = currentPage - 1; value <= currentPage + 1; value += 1) {
-    if (value > 1 && value < totalPages) {
-      pages.add(value);
-    }
+export function buildPagination(currentPage: number, totalPages: number): (number | string)[] {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
   }
 
-  return Array.from(pages).sort((a, b) => a - b);
+  if (currentPage <= 4) {
+    return [1, 2, 3, 4, 5, "...", totalPages];
+  }
+
+  if (currentPage >= totalPages - 3) {
+    return [1, "...", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+  }
+
+  return [1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages];
 }

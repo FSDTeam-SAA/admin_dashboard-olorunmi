@@ -1,5 +1,4 @@
-import Image from "next/image";
-
+import { AppLogo } from "@/components/common/app-logo";
 import { Card, CardContent } from "@/components/ui/card";
 
 export function AuthShell({
@@ -12,15 +11,15 @@ export function AuthShell({
   children: React.ReactNode;
 }) {
   return (
-    <Card className="w-full max-w-[502px] rounded-[20px] border-[#dfdfdf] bg-[#f4f4f4] shadow-none">
+    <Card className="w-full max-w-[480px] rounded-2xl border-border bg-card shadow-lg">
       <CardContent className="space-y-5 p-6 sm:p-8">
         <div className="flex justify-center">
-          <Image src="/logo-rss.png" alt="RSS" width={108} height={132} priority />
+          <AppLogo width={96} height={116} priority />
         </div>
 
         <div className="space-y-1 text-center">
-          <h1 className="text-[24px] font-semibold text-[#242424]">{title}</h1>
-          {subtitle ? <p className="text-sm text-[#acacac]">{subtitle}</p> : null}
+          <h1 className="text-2xl font-bold tracking-tight text-text-primary">{title}</h1>
+          {subtitle ? <p className="text-xs text-text-tertiary">{subtitle}</p> : null}
         </div>
 
         {children}

@@ -175,7 +175,7 @@ export default function OpenStreetMapPickerClient({
     <div className="space-y-2">
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#9a9a9a]" />
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500 dark:text-slate-300" />
           <Input
             className="pl-9"
             placeholder="Search location"
@@ -195,12 +195,12 @@ export default function OpenStreetMapPickerClient({
       </div>
 
       {suggestions.length ? (
-        <div className="max-h-36 overflow-y-auto rounded-xl border border-[#dbdbdb] bg-white">
+        <div className="max-h-36 overflow-y-auto rounded-xl border border-border bg-card">
           {suggestions.map((result, index) => (
             <button
               key={`${result.lat}-${result.lon}-${index}`}
               type="button"
-              className="block w-full border-b border-[#ededed] px-3 py-2 text-left text-xs text-[#383838] last:border-b-0 hover:bg-[#f5f2ea]"
+              className="block w-full border-b border-border px-3 py-2 text-left text-xs text-text-primary last:border-b-0 hover:bg-secondary-bg"
               onClick={() => moveToSearchResult(result)}
             >
               {result.display_name ?? "Unnamed location"}
@@ -211,7 +211,7 @@ export default function OpenStreetMapPickerClient({
 
       {searchError ? <p className="text-xs text-red-500">{searchError}</p> : null}
 
-      <div className="overflow-hidden rounded-xl border border-[#dbdbdb]">
+      <div className="overflow-hidden rounded-xl border border-border">
         <MapContainer
           center={mapCenter}
           zoom={DEFAULT_ZOOM}

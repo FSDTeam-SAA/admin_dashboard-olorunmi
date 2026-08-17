@@ -5,22 +5,29 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[#a89664]/40",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-primary/40 cursor-pointer",
   {
     variants: {
       variant: {
-        default: "bg-[#a79663] text-white hover:bg-[#8f7f52]",
-        destructive: "bg-[#ff2b2b] text-white hover:bg-[#e51f1f]",
+        default: "bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 shadow-xs",
+        primary: "bg-primary text-primary-foreground hover:bg-primary-hover shadow-xs",
+        success: "bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs",
+        teal: "bg-teal-600 text-white hover:bg-teal-700 shadow-xs",
+        destructive: "bg-red-600 text-white hover:bg-red-700 active:bg-red-800 shadow-xs",
         outline:
-          "border border-[#c0b388] bg-white text-[#a79663] hover:bg-[#f6f3ea]",
-        secondary: "bg-[#f0f0f0] text-[#252525] hover:bg-[#e7e7e7]",
-        ghost: "text-[#252525] hover:bg-[#f3f3f3]",
+          "border border-border bg-card text-text-primary hover:bg-secondary-bg hover:text-foreground",
+        secondary:
+          "bg-secondary-bg text-secondary-text hover:bg-secondary-hover",
+        ghost: "text-secondary-text hover:bg-ghost-hover hover:text-foreground",
+        tealOutline: "border border-teal-500/40 text-teal-600 dark:text-teal-400 bg-teal-500/10 hover:bg-teal-500/20",
+        slateOutline: "border border-border text-text-secondary hover:bg-secondary-bg hover:text-text-primary",
       },
       size: {
         default: "h-10 px-4 py-2",
-        sm: "h-9 rounded-md px-3",
-        lg: "h-11 rounded-md px-6",
-        icon: "size-10",
+        sm: "h-8.5 rounded-lg px-3 text-xs",
+        lg: "h-11 rounded-lg px-6 text-base",
+        icon: "size-10 rounded-lg",
+        iconSm: "size-8.5 rounded-lg",
       },
     },
     defaultVariants: {

@@ -1,24 +1,223 @@
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #efefef;
-  --foreground: #1f1f1f;
-  --card: #f4f4f4;
-  --primary: #a79663;
+  color-scheme: light;
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-secondary: #f1f5f9;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
   --primary-foreground: #ffffff;
-  --muted: #e7e7e7;
-  --muted-foreground: #8e8e8e;
-  --danger: #ff2b2b;
-  --warning: #ffa800;
-  --border: #dfdfdf;
+  --accent-green: #10b981;
+  --accent-green-hover: #059669;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --border: #e2e8f0;
+  --sidebar-bg: #ffffff;
+  --header-bg: #ffffff;
+  --input-bg: #ffffff;
+  --input-border: #cbd5e1;
+  --input-text: #0f172a;
+  --input-placeholder: #94a3b8;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #64748b;
+  --text-quaternary: #94a3b8;
+  --table-header-bg: #ffffff;
+  --table-header-text: #475569;
+  --table-row-border: #e2e8f0;
+  --table-cell-text: #1e293b;
+  --hover-bg: #f1f5f9;
+  --outline-border: #cbd5e1;
+  --outline-text: #2563eb;
+  --outline-hover-bg: #eff6ff;
+  --secondary-bg: #f1f5f9;
+  --secondary-text: #334155;
+  --secondary-hover: #e2e8f0;
+  --ghost-hover: #f1f5f9;
+  --dialog-bg: #ffffff;
+  --dialog-border: #e2e8f0;
+  --dialog-title: #0f172a;
+  --dialog-desc: #64748b;
+  --badge-bg: #f1f5f9;
+  --badge-text: #334155;
+  --avatar-fallback-bg: #e2e8f0;
+  --avatar-fallback-text: #334155;
+  --label-text: #334155;
+  --skeleton-bg: #e2e8f0;
+  --card-border: #e2e8f0;
+  --checkbox-border: #cbd5e1;
+  --card-hover-bg: #f8fafc;
+  --map-placeholder-start: #e2e8f0;
+  --map-placeholder-end: #f1f5f9;
+  --dark-badge-bg: #0f172a;
+  --dark-badge-text: #ffffff;
+  --light-gold: #3b82f6;
+  --info-bg: #eff6ff;
+  --info-text: #2563eb;
+  --success-bg: #ecfdf5;
+  --success-text: #059669;
+  --danger-bg: #fef2f2;
+  --danger-bg-soft: #fff1f2;
+  --warning-bg: #fffbeb;
+  --warning-text: #d97706;
+  --gold-tint: #eff6ff;
+
+  /* KPI Card Custom Colors (Light Mode) */
+  --kpi-missed-bg: #ef4444;
+  --kpi-missed-text: #ffffff;
+  --kpi-location-bg: #f97316;
+  --kpi-location-text: #ffffff;
+  --kpi-booked-bg: #3b82f6;
+  --kpi-booked-text: #ffffff;
+  --kpi-testing-bg: #f1f5f9;
+  --kpi-testing-text: #334155;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #070d18;
+  --foreground: #f8fafc;
+  --card: #0c1628;
+  --card-secondary: #111c33;
+  --primary: #2563eb;
+  --primary-hover: #3b82f6;
+  --primary-foreground: #ffffff;
+  --accent-green: #10b981;
+  --accent-green-hover: #059669;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --danger: #f87171;
+  --warning: #fbbf24;
+  --border: #1e293b;
+  --sidebar-bg: #09101d;
+  --header-bg: #070d18;
+  --input-bg: #0b1320;
+  --input-border: #1e293b;
+  --input-text: #f8fafc;
+  --input-placeholder: #64748b;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-tertiary: #64748b;
+  --text-quaternary: #475569;
+  --table-header-bg: #0c1628;
+  --table-header-text: #94a3b8;
+  --table-row-border: #1e293b;
+  --table-cell-text: #e2e8f0;
+  --hover-bg: #111c33;
+  --outline-border: #1e293b;
+  --outline-text: #60a5fa;
+  --outline-hover-bg: #1e293b;
+  --secondary-bg: #111c33;
+  --secondary-text: #e2e8f0;
+  --secondary-hover: #1e293b;
+  --ghost-hover: #111c33;
+  --dialog-bg: #0c1628;
+  --dialog-border: #1e293b;
+  --dialog-title: #f8fafc;
+  --dialog-desc: #94a3b8;
+  --badge-bg: #1e293b;
+  --badge-text: #e2e8f0;
+  --avatar-fallback-bg: #1e293b;
+  --avatar-fallback-text: #e2e8f0;
+  --label-text: #94a3b8;
+  --skeleton-bg: #1e293b;
+  --card-border: #1e293b;
+  --checkbox-border: #334155;
+  --card-hover-bg: #101c31;
+  --map-placeholder-start: #0c1628;
+  --map-placeholder-end: #111c33;
+  --dark-badge-bg: #070d18;
+  --dark-badge-text: #f8fafc;
+  --light-gold: #60a5fa;
+  --info-bg: #1e293b;
+  --info-text: #60a5fa;
+  --success-bg: #064e3b;
+  --success-text: #34d399;
+  --danger-bg: #450a0a;
+  --danger-bg-soft: #3f1010;
+  --warning-bg: #451a03;
+  --warning-text: #fbbf24;
+  --gold-tint: #111c33;
+
+  /* KPI Card Custom Colors (Dark Mode) */
+  --kpi-missed-bg: #b91c1c;
+  --kpi-missed-text: #ffffff;
+  --kpi-location-bg: #ea580c;
+  --kpi-location-text: #ffffff;
+  --kpi-booked-bg: #1d4ed8;
+  --kpi-booked-text: #ffffff;
+  --kpi-testing-bg: #1e293b;
+  --kpi-testing-text: #ffffff;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
-  --font-sans: "Poppins", "Segoe UI", Arial, sans-serif;
+  --color-card-secondary: var(--card-secondary);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-accent-green: var(--accent-green);
+  --color-accent-green-hover: var(--accent-green-hover);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-sidebar-bg: var(--sidebar-bg);
+  --color-header-bg: var(--header-bg);
+  --color-input-bg: var(--input-bg);
+  --color-input-text: var(--input-text);
+  --color-input-placeholder: var(--input-placeholder);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-quaternary: var(--text-quaternary);
+  --color-table-header-bg: var(--table-header-bg);
+  --color-table-header-text: var(--table-header-text);
+  --color-table-row-border: var(--table-row-border);
+  --color-table-cell-text: var(--table-cell-text);
+  --color-hover-bg: var(--hover-bg);
+  --color-outline-border: var(--outline-border);
+  --color-outline-text: var(--outline-text);
+  --color-outline-hover-bg: var(--outline-hover-bg);
+  --color-secondary-bg: var(--secondary-bg);
+  --color-secondary-text: var(--secondary-text);
+  --color-secondary-hover: var(--secondary-hover);
+  --color-ghost-hover: var(--ghost-hover);
+  --color-dialog-bg: var(--dialog-bg);
+  --color-dialog-border: var(--dialog-border);
+  --color-dialog-title: var(--dialog-title);
+  --color-dialog-desc: var(--dialog-desc);
+  --color-badge-bg: var(--badge-bg);
+  --color-badge-text: var(--badge-text);
+  --color-avatar-fallback-bg: var(--avatar-fallback-bg);
+  --color-avatar-fallback-text: var(--avatar-fallback-text);
+  --color-label-text: var(--label-text);
+  --color-skeleton-bg: var(--skeleton-bg);
+  --color-card-border: var(--card-border);
+  --color-checkbox-border: var(--checkbox-border);
+  --color-card-hover-bg: var(--card-hover-bg);
+  --color-map-placeholder-start: var(--map-placeholder-start);
+  --color-map-placeholder-end: var(--map-placeholder-end);
+  --color-dark-badge-bg: var(--dark-badge-bg);
+  --color-dark-badge-text: var(--dark-badge-text);
+  --color-light-gold: var(--light-gold);
+  --color-info-bg: var(--info-bg);
+  --color-info-text: var(--info-text);
+  --color-success-bg: var(--success-bg);
+  --color-success-text: var(--success-text);
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-bg-soft: var(--danger-bg-soft);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-text: var(--warning-text);
+  --color-gold-tint: var(--gold-tint);
+  --font-sans: "Inter", "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
 }
 
 * {
@@ -28,9 +227,52 @@
 body {
   background: var(--background);
   color: var(--foreground);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
 input::-ms-reveal,
 input::-ms-clear {
   display: none;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.25);
+  border-radius: 9999px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.45);
+}
+
+/* Date and Time Picker Icon Color Adjustments */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s ease, filter 0.15s ease;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="time"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+.dark input[type="date"]::-webkit-calendar-picker-indicator,
+.dark input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.2);
+  opacity: 0.9;
 }

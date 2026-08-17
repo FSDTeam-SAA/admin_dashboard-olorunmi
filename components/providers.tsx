@@ -5,6 +5,8 @@ import { SessionProvider } from "next-auth/react";
 import { Toaster } from "sonner";
 import { useState } from "react";
 
+import { ThemeProvider } from "@/components/theme-provider";
+
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
     () =>
@@ -16,15 +18,17 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
             retry: 1,
           },
         },
-      })
+      }),
   );
 
   return (
-    <SessionProvider>
-      <QueryClientProvider client={queryClient}>
-        {children}
-        <Toaster richColors position="top-right" />
-      </QueryClientProvider>
-    </SessionProvider>
+    <ThemeProvider>
+      <SessionProvider>
+        <QueryClientProvider client={queryClient}>
+          {children}
+          <Toaster richColors position="top-right" />
+        </QueryClientProvider>
+      </SessionProvider>
+    </ThemeProvider>
   );
 }

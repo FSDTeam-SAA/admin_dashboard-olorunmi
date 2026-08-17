@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, LogOut, Menu, Settings, Users } from "lucide-react";
 import { useSession } from "next-auth/react";
 
+import { AppLogo } from "@/components/common/app-logo";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { getProfile } from "@/lib/api";
@@ -53,7 +54,7 @@ export function DashboardSidebar({
 
   return (
     <>
-      <aside className="fixed top-0 left-0 z-40 hidden h-screen w-[240px] flex-col border-r border-[#dfdfdf] bg-[#f1f1f1] lg:flex">
+      <aside className="fixed top-0 left-0 z-40 hidden h-screen w-[240px] flex-col border-r border-border bg-sidebar-bg lg:flex">
         <SidebarContent
           pathname={pathname}
           session={session}
@@ -66,7 +67,7 @@ export function DashboardSidebar({
         <Button
           variant="secondary"
           size="icon"
-          className="size-10 rounded-lg bg-white"
+          className="size-10 rounded-lg bg-white dark:bg-secondary-bg"
           onClick={onMobileToggle}
         >
           <Menu className="size-5" />
@@ -89,7 +90,7 @@ export function DashboardSidebar({
 
       <aside
         className={cn(
-          "fixed top-0 left-0 z-50 flex h-screen w-[240px] flex-col border-r border-[#dfdfdf] bg-[#f1f1f1] transition-transform lg:hidden",
+          "fixed top-0 left-0 z-50 flex h-screen w-[240px] flex-col border-r border-border bg-sidebar-bg transition-transform lg:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -124,8 +125,8 @@ function SidebarContent({
 
   return (
     <>
-      <div className="flex items-center justify-center px-8 py-5">
-        <Image src="/logo-rss.png" alt="RSS Logo" width={74} height={90} priority />
+      <div className="flex items-center justify-center px-6 py-5">
+        <AppLogo width={76} height={92} priority />
       </div>
 
       <nav className="mt-5 flex flex-col gap-1.5 px-3">
@@ -138,34 +139,34 @@ function SidebarContent({
               key={item.href}
               href={item.href}
               className={cn(
-                "flex h-12 items-center gap-2 rounded-lg px-3 text-sm text-[#202020] transition-colors",
+                "flex h-11 items-center gap-3 rounded-lg px-3.5 text-sm font-medium transition-all",
                 active
-                  ? "bg-[#a79663] text-white"
-                  : "hover:bg-[#e6e6e6]"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "text-text-secondary hover:bg-secondary-bg hover:text-text-primary"
               )}
             >
-              <Icon className="size-4" />
-              <span className="text-base font-medium leading-none">{item.label}</span>
+              <Icon className="size-4.5" />
+              <span className="leading-none">{item.label}</span>
             </Link>
           );
         })}
       </nav>
 
       <div className="mt-auto px-3 pb-4">
-        <div className="mb-3 flex items-center gap-2 rounded-xl px-2 py-1">
-          <Avatar className="size-10">
+        <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-border/50 bg-secondary-bg/50 p-2">
+          <Avatar className="size-9 border border-border">
             <AvatarImage src={displayAvatar} alt={displayName} />
             <AvatarFallback>{getUserInitials(displayName)}</AvatarFallback>
           </Avatar>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-[#1f1f1f]">{displayName}</p>
-            <p className="truncate text-xs text-[#545454]">{displayEmail}</p>
+            <p className="truncate text-xs font-semibold text-text-primary">{displayName}</p>
+            <p className="truncate text-[11px] text-text-secondary">{displayEmail}</p>
           </div>
         </div>
 
         <Button
           variant="outline"
-          className="h-11 w-full justify-center border-[#ff9d9d] text-[#ff2b2b] hover:bg-[#fff4f4]"
+          className="h-10 w-full justify-center border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/40"
           onClick={onLogoutClick}
         >
           <LogOut className="size-4" />

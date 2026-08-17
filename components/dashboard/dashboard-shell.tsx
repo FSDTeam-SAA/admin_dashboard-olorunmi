@@ -26,7 +26,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   });
 
   return (
-    <div className="min-h-screen bg-[#efefef]">
+    <div className="min-h-screen bg-background text-foreground">
       <DashboardSidebar
         onLogoutClick={() => setLogoutOpen(true)}
         mobileOpen={mobileOpen}

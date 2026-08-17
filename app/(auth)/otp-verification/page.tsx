@@ -107,7 +107,7 @@ function OtpVerificationContent() {
               onKeyDown={(event) => onKeyDown(index, event)}
               inputMode="numeric"
               maxLength={1}
-              className="h-12 w-12 rounded-xl bg-[#e7e7e7] text-center text-lg font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[#a79663]/40"
+              className="h-12 w-12 rounded-xl border border-border bg-input-bg text-center text-lg font-semibold text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
             />
           ))}
         </div>

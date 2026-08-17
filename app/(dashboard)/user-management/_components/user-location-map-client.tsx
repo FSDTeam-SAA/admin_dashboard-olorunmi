@@ -30,7 +30,7 @@ export default function UserLocationMapClient({
   const center = useMemo<[number, number]>(() => [latitude, longitude], [latitude, longitude]);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-[#dfdfdf]">
+    <div className="overflow-hidden rounded-xl border border-border">
       <MapContainer
         center={center}
         zoom={DEFAULT_ZOOM}
@@ -49,7 +49,7 @@ export default function UserLocationMapClient({
           <Circle
             center={center}
             radius={radius}
-            pathOptions={{ color: "#a79663", fillColor: "#a79663", fillOpacity: 0.15 }}
+            pathOptions={{ color: "#2563eb", fillColor: "#2563eb", fillOpacity: 0.2 }}
           />
         ) : null}
       </MapContainer>

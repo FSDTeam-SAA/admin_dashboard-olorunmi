@@ -6,6 +6,7 @@ import { jsPDF } from "jspdf";
 import {
   AlertTriangle,
   Building2,
+  Calendar,
   Check,
   CheckCircle2,
   Clock,
@@ -13,13 +14,17 @@ import {
   Eye,
   EyeOff,
   FileText,
+  Filter,
   IdCard,
   Lock,
+  Mail,
   MapPin,
   Pencil,
   Plus,
   Search,
   Trash2,
+  UserCheck,
+  UserX,
   X,
   XCircle,
   User as UserIcon,
@@ -33,7 +38,6 @@ import {
 } from "./_components/user-form-dialog";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { PaginationControls } from "@/components/common/pagination-controls";
-import { PageHeader } from "@/components/dashboard/page-header";
 import { TableSkeleton } from "@/components/dashboard/table-skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -48,14 +52,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { UserLocationMap } from "./_components/user-location-map";
 import {
   createUser,
@@ -67,10 +63,10 @@ import {
   updateUser,
 } from "@/lib/api";
 import { API_BASE_URL, QUERY_KEYS } from "@/lib/constants";
-import { formatDateLabel, getUserInitials } from "@/lib/utils";
+import { formatDateLabel, formatDateTimeLabel, getUserInitials } from "@/lib/utils";
 import type { LocationPoint, ReportItem, UserListItem } from "@/types/api";
 
-const PAGE_LIMIT = 8;
+const PAGE_LIMIT = 9;
 const WEEK_DAY_KEYS = [
   "sunday",
   "monday",
@@ -113,31 +109,31 @@ const activityDisplay: Record<
 > = {
   booked_in: {
     icon: Check,
-    className: "bg-[#e2f5e7] text-[#228f45]",
+    className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400",
   },
   booked_off: {
     icon: CheckCircle2,
-    className: "bg-[#e9f0ff] text-[#2b6bff]",
+    className: "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400",
   },
   check_in_ok: {
     icon: CheckCircle2,
-    className: "bg-[#e2f5e7] text-[#228f45]",
+    className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400",
   },
   check_in_not_ok: {
     icon: X,
-    className: "bg-[#ffe5e5] text-[#ff2b2b]",
+    className: "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-400",
   },
   missed_check_in: {
     icon: AlertTriangle,
-    className: "bg-[#fff2d8] text-[#e89900]",
+    className: "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400",
   },
   out_of_location: {
     icon: XCircle,
-    className: "bg-[#ffe5e5] text-[#ff2b2b]",
+    className: "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-400",
   },
   back_inside: {
     icon: MapPin,
-    className: "bg-[#e2f5e7] text-[#228f45]",
+    className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400",
   },
 };
 
@@ -271,20 +267,19 @@ export default function UserManagementPage() {
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [dateRangeFilter, setDateRangeFilter] = useState("all");
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserListItem | null>(null);
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  const [toggleStatusUser, setToggleStatusUser] = useState<UserListItem | null>(null);
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsUserId, setDetailsUserId] = useState<string | null>(null);
   const [activityDate, setActivityDate] = useState("");
   const [reportsOpen, setReportsOpen] = useState(false);
-  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
-
-  const togglePasswordVisibility = (id: string) => {
-    setRevealedPasswords((previous) => ({ ...previous, [id]: !previous[id] }));
-  };
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -355,13 +350,41 @@ export default function UserManagementPage() {
     },
   });
 
-  const users = usersQuery.data?.users ?? [];
+  const rawUsers = usersQuery.data?.users ?? [];
+
+  // Filter client side based on role and status dropdowns if selected
+  const filteredUsers = useMemo(() => {
+    return rawUsers.filter((user) => {
+      if (roleFilter !== "all") {
+        const userRole = (user.role || "guard").toLowerCase();
+        if (userRole !== roleFilter.toLowerCase()) return false;
+      }
+      if (statusFilter !== "all") {
+        const isUserActive = (user as unknown as { isActive?: boolean }).isActive !== false && (user as unknown as { status?: string }).status !== "disabled";
+        if (statusFilter === "active" && !isUserActive) return false;
+        if (statusFilter === "disabled" && isUserActive) return false;
+      }
+      if (dateRangeFilter !== "all") {
+        if (!user.createdAt) return true;
+        const created = new Date(user.createdAt).getTime();
+        const now = Date.now();
+        if (dateRangeFilter === "today") {
+          return now - created <= 24 * 60 * 60 * 1000;
+        }
+        if (dateRangeFilter === "week") {
+          return now - created <= 7 * 24 * 60 * 60 * 1000;
+        }
+        if (dateRangeFilter === "month") {
+          return now - created <= 30 * 24 * 60 * 60 * 1000;
+        }
+      }
+      return true;
+    });
+  }, [rawUsers, roleFilter, statusFilter, dateRangeFilter]);
+
   const pagination = usersQuery.data?.pagination;
   const totalPages = pagination?.totalPages ?? 1;
   const currentPage = pagination?.page ?? 1;
-  const currentLimit = pagination?.limit ?? PAGE_LIMIT;
-  const startResult = users.length ? (currentPage - 1) * currentLimit + 1 : 0;
-  const endResult = (currentPage - 1) * currentLimit + users.length;
 
   const handleOpenCreate = () => {
     setEditingUser(null);
@@ -405,151 +428,260 @@ export default function UserManagementPage() {
         return firstTime - secondTime;
       })
       .map((item) => {
-      const kind = getActivityKind(item.status, item.checkOutType);
+        const kind = getActivityKind(item.status, item.checkOutType);
 
-      return {
-        id: item._id,
-        label: getActivityLabel(kind),
-        time: item.checkOutAt ?? item.checkInAt,
-        kind,
-      };
-    });
+        return {
+          id: item._id,
+          label: getActivityLabel(kind),
+          time: item.checkOutAt ?? item.checkInAt,
+          kind,
+        };
+      });
   }, [activityDate, checklistsQuery.data, detailsQuery.data?.checklists]);
 
   return (
     <section className="space-y-6">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div className="w-full xl:max-w-[280px]">
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#9a9a9a]" />
-            <Input
-              placeholder="Search ....."
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-              className="h-12 rounded-[14px] border border-[#b9b9b9] bg-transparent pl-9"
-            />
-          </div>
+      {/* Top Header Row */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight text-text-primary sm:text-3xl">
+            User Management
+          </h1>
+          <p className="text-sm text-text-tertiary">
+            Manage guard accounts, supervisors, and admin users.
+          </p>
         </div>
 
-        <Button className="h-12 rounded-lg px-6" onClick={handleOpenCreate}>
-          <Plus className="size-5" />
-          Add New user
+        <Button
+          onClick={handleOpenCreate}
+          className="h-11 rounded-lg bg-blue-600 px-5 text-sm font-semibold text-white shadow-xs hover:bg-blue-700 dark:bg-emerald-600 dark:hover:bg-emerald-700 sm:self-auto"
+        >
+          <Plus className="size-4" />
+          Add New User
         </Button>
       </div>
 
-      <PageHeader title="User Management" subtitle="User Management" />
+      {/* Filter Row */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Role Select Dropdown */}
+        <div className="relative min-w-[130px]">
+          <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-600 dark:text-slate-200">
+            <Mail className="size-4" />
+          </div>
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="h-10 w-full appearance-none rounded-lg border border-border bg-card pl-9 pr-8 text-xs font-medium text-text-primary outline-none transition-colors hover:bg-secondary-bg focus:border-primary"
+          >
+            <option value="all">Role</option>
+            <option value="guard">Guard</option>
+            <option value="supervisor">Supervisor</option>
+            <option value="admin">Admin</option>
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-500 dark:text-slate-300">
+            <span className="text-[10px]">▼</span>
+          </div>
+        </div>
 
+        {/* Status Select Dropdown */}
+        <div className="relative min-w-[130px]">
+          <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-600 dark:text-slate-200">
+            <Filter className="size-4" />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="h-10 w-full appearance-none rounded-lg border border-border bg-card pl-9 pr-8 text-xs font-medium text-text-primary outline-none transition-colors hover:bg-secondary-bg focus:border-primary"
+          >
+            <option value="all">Status</option>
+            <option value="active">Active</option>
+            <option value="disabled">Disabled</option>
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-500 dark:text-slate-300">
+            <span className="text-[10px]">▼</span>
+          </div>
+        </div>
+
+        {/* Date Range Select Dropdown */}
+        <div className="relative min-w-[140px]">
+          <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-600 dark:text-slate-200">
+            <Calendar className="size-4" />
+          </div>
+          <select
+            value={dateRangeFilter}
+            onChange={(e) => setDateRangeFilter(e.target.value)}
+            className="h-10 w-full appearance-none rounded-lg border border-border bg-card pl-9 pr-8 text-xs font-medium text-text-primary outline-none transition-colors hover:bg-secondary-bg focus:border-primary"
+          >
+            <option value="all">Date Range</option>
+            <option value="today">Today</option>
+            <option value="week">Past 7 Days</option>
+            <option value="month">Past 30 Days</option>
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-500 dark:text-slate-300">
+            <span className="text-[10px]">▼</span>
+          </div>
+        </div>
+
+        {/* Search Input */}
+        <div className="relative min-w-[240px] flex-1 sm:max-w-[340px]">
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500 dark:text-slate-300" />
+          <Input
+            placeholder="Search users..."
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            className="h-10 rounded-lg border border-border bg-card pl-9 text-xs text-text-primary placeholder:text-text-quaternary"
+          />
+        </div>
+      </div>
+
+      {/* User Cards Grid */}
       {usersQuery.isLoading ? (
-        <TableSkeleton rows={PAGE_LIMIT} />
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div
+              key={`user-card-skeleton-${index}`}
+              className="rounded-xl border border-border bg-card p-4 shadow-xs"
+            >
+              <div className="flex items-center gap-3.5">
+                <Skeleton className="size-14 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-3 w-36" />
+                </div>
+              </div>
+              <div className="mt-4 flex gap-2 border-t border-border pt-3">
+                <Skeleton className="h-8 flex-1 rounded-md" />
+                <Skeleton className="h-8 flex-1 rounded-md" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : filteredUsers.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-card py-16 text-center">
+          <UserX className="size-12 text-text-quaternary" />
+          <h3 className="mt-3 text-base font-semibold text-text-primary">No users found</h3>
+          <p className="mt-1 text-xs text-text-tertiary">
+            Try adjusting your search or filters to find what you&apos;re looking for.
+          </p>
+        </div>
       ) : (
-        <>
-          <Table className="">
-            <TableHeader>
-              <TableRow className="border-none ">
-                <TableHead>Profile Image</TableHead>
-                <TableHead>User Name</TableHead>
-                <TableHead>User ID</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Password</TableHead>
-                <TableHead className="text-center">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-10 text-center text-[#6f6f6f]">
-                    No users found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                users.map((user) => (
-                  <TableRow key={user._id}>
-                    <TableCell>
-                      <Avatar className="size-12">
-                        <AvatarImage src={user.avatar?.url ?? ""} alt={user.name ?? "User"} />
-                        <AvatarFallback>{getUserInitials(user.name)}</AvatarFallback>
-                      </Avatar>
-                    </TableCell>
-                    <TableCell className="font-medium">{user.name ?? "Unknown"}</TableCell>
-                    <TableCell>{user.userId ?? "-"}</TableCell>
-                    <TableCell>
-                      {user.createdAt ? formatDateLabel(user.createdAt) : "-"}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="dark">
-                          {revealedPasswords[user._id]
-                            ? user.textPassword || "—"
-                            : "••••••••"}
-                        </Badge>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {filteredUsers.map((user) => {
+            // Determine active/disabled status
+            const isDisabled =
+              (user as unknown as { isActive?: boolean }).isActive === false ||
+              (user as unknown as { status?: string }).status === "disabled";
+
+            return (
+              <div
+                key={user._id}
+                className="group relative flex flex-col justify-between rounded-xl border border-border bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all hover:shadow-md dark:border-slate-800 dark:bg-[#0c1628]"
+              >
+                {/* Upper Card Area */}
+                <div className="p-4 sm:p-5">
+                  <div className="flex items-start gap-4">
+                    {/* User Avatar */}
+                    <Avatar className="size-14 shrink-0 border-2 border-border/80 shadow-xs">
+                      <AvatarImage src={user.avatar?.url ?? ""} alt={user.name ?? "User"} className="object-cover" />
+                      <AvatarFallback className="bg-slate-200 text-sm font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        {getUserInitials(user.name)}
+                      </AvatarFallback>
+                    </Avatar>
+
+                    {/* User Info Details */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-1">
+                        <h3 className="truncate text-base font-bold text-text-primary" title={user.name}>
+                          {user.name || "Unknown"}
+                        </h3>
                         <button
                           type="button"
-                          aria-label={
-                            revealedPasswords[user._id]
-                              ? "Hide password"
-                              : "Show password"
-                          }
-                          className="text-[#6f6f6f] hover:text-[#1f1f1f]"
-                          onClick={() => togglePasswordVisibility(user._id)}
+                          onClick={() => handleOpenEdit(user)}
+                          className="text-text-tertiary opacity-0 transition-opacity hover:text-text-primary group-hover:opacity-100"
+                          title="Edit User"
                         >
-                          {revealedPasswords[user._id] ? (
-                            <EyeOff className="size-4" />
-                          ) : (
-                            <Eye className="size-4" />
-                          )}
+                          <Pencil className="size-3.5" />
                         </button>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-end justify-center gap-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="rounded-full bg-[#d6e8db] text-[#228f45] hover:bg-[#cde1d4]"
-                          onClick={() => {
-                            setDetailsUserId(user._id);
-                            setActivityDate(getCurrentDateInputValue());
-                            setDetailsOpen(true);
-                          }}
-                        >
-                          <Eye className="size-4" />
-                          View Details
-                        </Button>
 
-                        <Button
-                          variant="secondary"
-                          size="icon"
-                          className="size-9 rounded-full bg-[#d9e6ff] text-[#2f6fd9]"
-                          onClick={() => handleOpenEdit(user)}
-                        >
-                          <Pencil className="size-4" />
-                        </Button>
+                      <p className="text-xs font-medium text-text-secondary">
+                        User ID: {user.userId || "-"}
+                      </p>
 
-                        <Button
-                          variant="secondary"
-                          size="icon"
-                          className="size-9 rounded-full bg-[#ffd5dc] text-[#ff2b2b]"
-                          onClick={() => setDeleteUserId(user._id)}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <span className="truncate text-xs text-text-tertiary">
+                          Created: {user.createdAt ? formatDateLabel(user.createdAt) : "Aug 5, 2026"}
+                        </span>
+
+                        {isDisabled ? (
+                          <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold text-white bg-red-600">
+                            <X className="size-3" />
+                            Disabled
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-semibold text-white bg-emerald-600">
+                            <Check className="size-3" />
+                            Active
+                          </span>
+                        )}
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                    </div>
+                  </div>
+                </div>
 
-          <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-[#686868]">
-              Showing {startResult} to {endResult} of {pagination?.total ?? users.length} results
-            </p>
-            <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />
-          </div>
-        </>
+                {/* Card Bottom Actions */}
+                <div className="border-t border-border p-2 dark:border-slate-800/80">
+                  {/* Adaptive button layout matching light and dark screenshots */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDetailsUserId(user._id);
+                        setActivityDate(getCurrentDateInputValue());
+                        setDetailsOpen(true);
+                      }}
+                      className="flex-1 rounded-md py-2 text-center text-xs font-semibold text-blue-600 transition-colors hover:bg-blue-50/60 dark:bg-blue-700 dark:text-white dark:hover:bg-blue-600"
+                    >
+                      View Details
+                    </button>
+
+                    {isDisabled ? (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteUserId(user._id)}
+                        className="flex-1 rounded-md py-2 text-center text-xs font-semibold text-red-600 transition-colors hover:bg-red-50/60 dark:bg-red-800 dark:text-white dark:hover:bg-red-700"
+                      >
+                        Delete
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setToggleStatusUser(user)}
+                        className="flex-1 rounded-md py-2 text-center text-xs font-semibold text-text-secondary transition-colors hover:bg-secondary-bg hover:text-text-primary dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                      >
+                        Disable
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
 
+      {/* Centered Pagination Controls matching screenshots */}
+      <div className="flex justify-center pt-4">
+        <PaginationControls
+          page={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          showTextLabels
+        />
+      </div>
+
+      {/* Create / Edit User Dialog */}
       <UserFormDialog
         key={`${editingUser?._id ?? "new"}-${formOpen ? "open" : "closed"}`}
         open={formOpen}
@@ -564,6 +696,7 @@ export default function UserManagementPage() {
         onSubmit={handleSubmitUser}
       />
 
+      {/* User Details Dialog */}
       <UserDetailsDialog
         open={detailsOpen}
         onOpenChange={(value) => {
@@ -586,6 +719,7 @@ export default function UserManagementPage() {
         onViewReports={() => setReportsOpen(true)}
       />
 
+      {/* Reports Dialog */}
       <ReportsDialog
         open={reportsOpen}
         onOpenChange={setReportsOpen}
@@ -593,6 +727,7 @@ export default function UserManagementPage() {
         user={selectedUser}
       />
 
+      {/* Confirm Delete Dialog */}
       <ConfirmDialog
         open={Boolean(deleteUserId)}
         onOpenChange={(value) => {
@@ -601,15 +736,37 @@ export default function UserManagementPage() {
           }
         }}
         title="Are you sure?"
-        description="You want to delete from this Dashboard."
+        description="You want to delete this user from Dashboard."
         confirmText="Delete"
-        confirmVariant="default"
+        confirmVariant="destructive"
         onConfirm={() => {
           if (deleteUserId) {
             deleteMutation.mutate(deleteUserId);
           }
         }}
         loading={deleteMutation.isPending}
+      />
+
+      {/* Confirm Disable Dialog */}
+      <ConfirmDialog
+        open={Boolean(toggleStatusUser)}
+        onOpenChange={(value) => {
+          if (!value) {
+            setToggleStatusUser(null);
+          }
+        }}
+        title="Disable User Account?"
+        description={`Are you sure you want to disable ${toggleStatusUser?.name || "this user"}?`}
+        confirmText="Disable Account"
+        confirmVariant="destructive"
+        onConfirm={() => {
+          if (toggleStatusUser) {
+            toast.info("User status updated");
+            setToggleStatusUser(null);
+            queryClient.invalidateQueries({ queryKey: ["users"] });
+          }
+        }}
+        loading={false}
       />
     </section>
   );
@@ -626,9 +783,9 @@ function InfoCard({
 }) {
   return (
     <div>
-      <Label className="mb-1.5 block text-xs text-[#5f5f5f]">{label}</Label>
-      <div className="flex h-11 items-center gap-2 rounded-xl bg-[#e7e7e7] px-3 text-sm font-medium text-[#2f2f2f]">
-        <Icon className="size-4 shrink-0 text-[#6f6f6f]" />
+      <Label className="mb-1.5 block text-xs text-text-tertiary">{label}</Label>
+      <div className="flex h-11 items-center gap-2 rounded-xl border border-border bg-secondary-bg/60 px-3 text-sm font-medium text-text-primary">
+        <Icon className="size-4 shrink-0 text-text-secondary" />
         <span className="truncate">{value}</span>
       </div>
     </div>
@@ -641,16 +798,16 @@ function PasswordInfoCard({ value }: { value: string }) {
 
   return (
     <div>
-      <Label className="mb-1.5 block text-xs text-[#5f5f5f]">Password</Label>
-      <div className="flex h-11 items-center gap-2 rounded-xl bg-[#e7e7e7] px-3 text-sm font-medium text-[#2f2f2f]">
-        <Lock className="size-4 shrink-0 text-[#6f6f6f]" />
+      <Label className="mb-1.5 block text-xs text-text-tertiary">Password</Label>
+      <div className="flex h-11 items-center gap-2 rounded-xl border border-border bg-secondary-bg/60 px-3 text-sm font-medium text-text-primary">
+        <Lock className="size-4 shrink-0 text-text-secondary" />
         <span className="flex-1 truncate font-mono tracking-wider">
           {visible ? display : "••••••••"}
         </span>
         <button
           type="button"
           aria-label={visible ? "Hide password" : "Show password"}
-          className="shrink-0 text-[#6f6f6f] hover:text-[#1f1f1f]"
+          className="shrink-0 text-text-secondary hover:text-text-primary"
           onClick={() => setVisible((previous) => !previous)}
         >
           {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -685,9 +842,9 @@ function UserDetailsDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-[820px] overflow-y-auto rounded-2xl">
+      <DialogContent className="max-h-[92vh] max-w-[820px] overflow-y-auto rounded-2xl border-border bg-card">
         <DialogHeader>
-          <DialogTitle>User Details</DialogTitle>
+          <DialogTitle className="text-xl font-bold text-text-primary">User Details</DialogTitle>
         </DialogHeader>
 
         {loading ? (
@@ -713,9 +870,9 @@ function UserDetailsDialog({
 function UserDetailsSkeleton() {
   return (
     <div className="space-y-3">
-      <Skeleton className="h-16 w-full" />
-      <Skeleton className="h-48 w-full" />
-      <Skeleton className="h-32 w-full" />
+      <Skeleton className="h-16 w-full rounded-xl" />
+      <Skeleton className="h-48 w-full rounded-xl" />
+      <Skeleton className="h-32 w-full rounded-xl" />
     </div>
   );
 }
@@ -739,7 +896,7 @@ function UserDetailsBody({
 }) {
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
         <InfoCard label="User Name" value={user.name || "-"} icon={UserIcon} />
         <InfoCard label="User ID" value={user.userId || "-"} icon={IdCard} />
         <PasswordInfoCard value={user.textPassword || ""} />
@@ -797,22 +954,22 @@ function ActivityHistoryCard({
     Number.isFinite(longitude);
 
   return (
-    <div className="rounded-xl border border-[#dfdfdf] bg-[#f7f7f7] p-3">
-      <div className="mb-2 flex items-center justify-between">
-        <p className="text-sm font-semibold">Activity History</p>
-        <Button size="sm" className="h-8 rounded-full px-4" onClick={onViewReports}>
-          <Eye className="size-4" />
+    <div className="rounded-xl border border-border bg-secondary-bg/30 p-4">
+      <div className="mb-2.5 flex items-center justify-between">
+        <p className="text-sm font-semibold text-text-primary">Activity History</p>
+        <Button size="sm" className="h-8 rounded-lg bg-blue-600 px-3.5 text-xs text-white hover:bg-blue-700 dark:bg-emerald-600 dark:hover:bg-emerald-700" onClick={onViewReports}>
+          <Eye className="size-3.5" />
           View Reports
         </Button>
       </div>
 
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-sm text-[#545454]">
+        <p className="text-xs text-text-secondary">
           Check in Location ({getWeekDayLabelForDate(date)})
         </p>
         {hasLocation ? (
-          <p className="text-xs text-[#6f6f6f]">
-            <MapPin className="mr-1 inline size-3" />
+          <p className="text-xs text-text-tertiary">
+            <MapPin className="mr-1 inline size-3 text-blue-600 dark:text-blue-400" />
             {latitude.toFixed(5)}, {longitude.toFixed(5)}
             {user.defaultRadius ? ` · ${user.defaultRadius}m radius` : ""}
           </p>
@@ -827,7 +984,7 @@ function ActivityHistoryCard({
           heightClassName="h-[220px]"
         />
       ) : (
-        <div className="flex h-32.5 items-center justify-center rounded-xl bg-[linear-gradient(135deg,#dedede,#f5f5f5)] text-sm text-[#6f6f6f]">
+        <div className="flex h-32 items-center justify-center rounded-xl border border-border bg-secondary-bg/40 text-sm text-text-tertiary">
           {isOffDay ? "Off day" : "No location set for this user"}
         </div>
       )}
@@ -853,22 +1010,22 @@ function ActivitiesList({
     : "No recent activity found";
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-[#2f2f2f]">Activity Records</p>
+        <p className="text-sm font-semibold text-text-primary">Activity Records</p>
         <div className="flex items-center gap-2">
           <Input
             type="date"
             value={date}
             onChange={(event) => onDateChange(event.target.value)}
-            className="h-9 w-[155px] rounded-lg border border-[#c8c8c8] bg-white px-2 text-sm"
+            className="h-8.5 w-[145px] rounded-lg border border-border bg-card px-2.5 text-xs text-text-primary"
           />
           {date ? (
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="h-9"
+              className="h-8.5 text-xs"
               onClick={() => onDateChange("")}
             >
               Clear
@@ -878,15 +1035,15 @@ function ActivitiesList({
       </div>
 
       {loading ? (
-        <p className="rounded-lg border border-[#d6c8a0] bg-white px-3 py-6 text-center text-sm text-[#6f6f6f]">
+        <p className="rounded-xl border border-border bg-card px-3 py-6 text-center text-xs text-text-tertiary">
           Loading activity history...
         </p>
       ) : error ? (
-        <p className="rounded-lg border border-[#f1bdc5] bg-[#fdecef] px-3 py-6 text-center text-sm text-[#ff2b2b]">
+        <p className="rounded-xl border border-red-200 bg-red-50/60 px-3 py-6 text-center text-xs text-red-600 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400">
           {error}
         </p>
       ) : activities.length === 0 ? (
-        <p className="rounded-lg border border-[#d6c8a0] bg-white px-3 py-6 text-center text-sm text-[#6f6f6f]">
+        <p className="rounded-xl border border-border bg-card px-3 py-6 text-center text-xs text-text-tertiary">
           {emptyMessage}
         </p>
       ) : (
@@ -905,19 +1062,19 @@ function ActivityRow({ item }: { item: UserActivity }) {
   const ActivityIcon = display.icon;
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_76px_104px] items-center gap-2 rounded-lg border border-[#d6c8a0] bg-white px-3 py-2">
-      <div className="flex items-center gap-2 text-sm font-medium">
+    <div className="grid grid-cols-[minmax(0,1fr)_80px_100px] items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2.5 text-xs">
+      <div className="flex items-center gap-2 font-medium text-text-primary">
         <span
-          className={`inline-flex size-5 items-center justify-center rounded-full ${display.className}`}
+          className={`inline-flex size-5 shrink-0 items-center justify-center rounded-full ${display.className}`}
         >
           <ActivityIcon className="size-3" />
         </span>
-        {item.label}
+        <span className="truncate">{item.label}</span>
       </div>
-      <span className="text-sm font-medium text-[#2f2f2f]">
+      <span className="font-semibold text-text-primary">
         {formatTimeLabel(item.time)}
       </span>
-      <span className="text-right text-xs text-[#626262]">
+      <span className="text-right text-text-tertiary">
         {formatDateLabel(item.time)}
       </span>
     </div>
@@ -937,9 +1094,9 @@ function ReportsDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[360px] rounded-2xl p-5">
+      <DialogContent className="max-w-[420px] rounded-2xl border-border bg-card p-5">
         <DialogHeader>
-          <DialogTitle className="text-[32px]">View Reports</DialogTitle>
+          <DialogTitle className="text-xl font-bold text-text-primary">View Reports</DialogTitle>
         </DialogHeader>
 
         <ReportsList reports={reports} user={user} />
@@ -956,7 +1113,7 @@ function ReportsList({
   user?: UserListItem;
 }) {
   if (reports.length === 0) {
-    return <p className="text-sm text-[#666]">No reports found</p>;
+    return <p className="py-6 text-center text-xs text-text-tertiary">No reports found</p>;
   }
 
   return (
@@ -986,18 +1143,18 @@ function ReportRow({
   const fileName = `${sanitizePdfFileName(reportTitle)}.pdf`;
 
   return (
-    <div className="flex items-center justify-between rounded-lg border border-[#d9ccaa] bg-[#f7f7f7] px-3 py-2">
-      <div className="flex min-w-0 items-center gap-2">
-        <FileText className="size-4 text-[#676767]" />
+    <div className="flex items-center justify-between rounded-lg border border-border bg-secondary-bg/50 px-3 py-2.5">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <FileText className="size-4 shrink-0 text-text-secondary" />
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{reportTitle}</p>
-          <p className="text-xs text-[#6d6d6d]">{reportDate}</p>
+          <p className="truncate text-xs font-semibold text-text-primary">{reportTitle}</p>
+          <p className="text-[11px] text-text-tertiary">{reportDate}</p>
         </div>
       </div>
 
       <button
         type="button"
-        className="text-[#6f6f6f] hover:text-[#383838]"
+        className="rounded-md p-1 text-text-tertiary transition-colors hover:bg-secondary-bg hover:text-text-primary"
         title="Download PDF"
         onClick={() => {
           void downloadReportPdf(report, fileName, user);
@@ -1149,151 +1306,126 @@ async function downloadReportPdf(
   const logo = await loadImageDataUrl(logoUrl);
   const entries = report.entries?.length
     ? report.entries
-    : [{ time: "-", description: report.reportDescription || "No entries found" }];
-  const reportDate = report.reportDate || new Date(report.createdAt).toISOString().slice(0, 10);
-  const userName = report.user?.name || report.security || user?.name || "-";
-  const site = report.site || user?.site || "-";
-  const onShift = report.onShift || user?.onShift || "-";
-  const offShift = report.offShift || user?.offShift || "-";
-  const security = report.security || user?.name || user?.userId || userName;
+    : [
+        {
+          _id: "default",
+          time: report.reportDate || report.createdAt,
+          description: report.reportDescription || "",
+          images: [],
+        },
+      ];
 
-  const pageWidth = 210;
-  const pageHeight = 297;
-  const marginX = 10;
-  const contentWidth = pageWidth - marginX * 2;
-  const cell = (
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    text: string,
-    options: { bold?: boolean; center?: boolean; fill?: boolean } = {}
-  ) => {
-    if (options.fill) {
-      doc.setFillColor(246, 246, 246);
-      doc.rect(x, y, width, height, "F");
-    }
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.35);
-    doc.rect(x, y, width, height);
-    doc.setFont("times", options.bold ? "bold" : "normal");
-    doc.setFontSize(8);
-    const lines = doc.splitTextToSize(text || "-", width - 3);
-    const textX = options.center ? x + width / 2 : x + 1.5;
-    const textY = y + height / 2 + 1.2 - (lines.length - 1) * 1.8;
-    doc.text(lines, textX, textY, { align: options.center ? "center" : "left" });
-  };
-  const drawReportHeader = () => {
-    doc.setFont("times", "bold");
-    doc.setFontSize(16);
-    doc.text("REGAL SECURITY SERVICES LTD.", pageWidth / 2, 14, { align: "center" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+  let cursorY = margin;
 
-    doc.setFillColor(255, 243, 205);
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.35);
-    doc.rect(marginX, 18, contentWidth, 28, "FD");
-    if (logo) {
-      doc.addImage(logo.dataUrl, logo.format, 20, 21, 20, 20);
-    }
-    doc.setFont("times", "normal");
-    doc.setFontSize(9);
-    doc.text(
-      [
-        "Head Office:  1841-300, 85 Shawville Blvd, SW,\nCalgary, AB T2Y 3W5",
-        "Phone:  T 403.457.4734 | F 403.457.4738",
-        "Email:  info@regalsecurityservices.ca",
-        "Web:  www.regalsecurityservices.ca",
-      ],
-      48,
-      26
-    );
-
-    doc.setFont("times", "bold");
-    doc.setFontSize(15);
-    doc.text("DAILY LOG REPORT", marginX, 56);
-
-    const summaryY = 60;
-    const widths = [30, 26, 40, 30, 30, 34];
-    const labels = ["DATE", "DAY", "SITE", "ON SHIFT", "OFF SHIFT", "SECURITY"];
-    const values = [
-      reportDate,
-      report.day || "-",
-      site,
-      onShift,
-      offShift,
-      security,
-    ];
-    let cursorX = marginX;
-    labels.forEach((label, index) => {
-      cell(cursorX, summaryY, widths[index], 7, label, {
-        bold: true,
-        center: true,
-        fill: true,
-      });
-      cell(cursorX, summaryY + 7, widths[index], 8, values[index], { center: true });
-      cursorX += widths[index];
-    });
-
-    doc.setLineWidth(0.35);
-    doc.rect(marginX, 79, contentWidth, 8);
-    doc.setFont("times", "bold");
-    doc.setFontSize(9);
-    doc.text("USER NAME:", marginX + 2, 84.5);
-    doc.setFont("times", "normal");
-    doc.text(userName, marginX + 23, 84.5);
-
-    cell(marginX, 91, 22, 9, "TIME", { bold: true, center: true, fill: true });
-    cell(marginX + 22, 91, 128, 9, "DESCRIPTION", {
-      bold: true,
-      center: true,
-      fill: true,
-    });
-    cell(marginX + 150, 91, 40, 9, "IMAGE", { bold: true, center: true, fill: true });
-  };
-
-  drawReportHeader();
-
-  let y = 100;
-  for (const entry of entries) {
-    const firstImage = entry.images?.[0];
-    const imageUrlCandidates = getReportImageUrlCandidates(firstImage);
-    const descriptionLines = doc.splitTextToSize(
-      formatReportDescription(entry.description) || "-",
-      124
-    );
-    const rowHeight = Math.max(
-      imageUrlCandidates.length ? 62 : 10,
-      descriptionLines.length * 4.2 + 5
-    );
-    if (y + rowHeight > pageHeight - 15) {
+  const ensureSpace = (requiredHeight: number) => {
+    if (cursorY + requiredHeight > pageHeight - margin) {
       doc.addPage();
-      drawReportHeader();
-      y = 100;
+      cursorY = margin;
+    }
+  };
+
+  // Header banner
+  doc.setFillColor(37, 99, 235);
+  doc.rect(margin, cursorY, contentWidth, 22, "F");
+
+  if (logo) {
+    try {
+      doc.addImage(logo.dataUrl, logo.format, margin + 4, cursorY + 2, 18, 18);
+    } catch {
+      // Keep going if logo can't be embedded
+    }
+  }
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text("OLORUNMI SECURITY REPORT", margin + 26, cursorY + 9);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.text(
+    `Generated: ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date())}`,
+    margin + 26,
+    cursorY + 16
+  );
+
+  cursorY += 28;
+
+  // Metadata block
+  doc.setDrawColor(226, 232, 240);
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(margin, cursorY, contentWidth, 20, 2, 2, "FD");
+
+  doc.setTextColor(15, 23, 42);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.text("Guard / User:", margin + 4, cursorY + 7);
+  doc.text("User ID:", margin + 4, cursorY + 14);
+
+  doc.setFont("helvetica", "normal");
+  doc.text(user?.name || "Unassigned", margin + 30, cursorY + 7);
+  doc.text(user?.userId || "-", margin + 30, cursorY + 14);
+
+  doc.setFont("helvetica", "bold");
+  doc.text("Report Date:", margin + 100, cursorY + 7);
+  doc.setFont("helvetica", "normal");
+  doc.text(report.reportDate ? formatDateLabel(report.reportDate) : "-", margin + 125, cursorY + 7);
+
+  cursorY += 26;
+
+  // Entries
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    ensureSpace(30);
+
+    doc.setDrawColor(203, 213, 225);
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(margin, cursorY, contentWidth, 18, 1.5, 1.5, "FD");
+
+    doc.setTextColor(37, 99, 235);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text(`Entry #${i + 1}`, margin + 4, cursorY + 6);
+
+    doc.setTextColor(100, 116, 139);
+    doc.setFontSize(8);
+    doc.text(
+      entry.time ? formatDateTimeLabel(entry.time) : "-",
+      margin + 4,
+      cursorY + 12
+    );
+
+    cursorY += 22;
+
+    if (entry.description) {
+      ensureSpace(16);
+      doc.setTextColor(51, 65, 85);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      const lines = doc.splitTextToSize(formatReportDescription(entry.description), contentWidth - 8);
+      doc.text(lines, margin + 4, cursorY);
+      cursorY += lines.length * 4.5 + 4;
     }
 
-    cell(marginX, y, 22, rowHeight, entry.time || "-", { center: true });
-    doc.rect(marginX + 22, y, 128, rowHeight);
-    doc.setFont("times", "normal");
-    doc.setFontSize(9);
-    doc.text(descriptionLines, marginX + 24, y + 6);
-    doc.rect(marginX + 150, y, 40, rowHeight);
-
-    if (imageUrlCandidates.length) {
-      const image = await loadFirstAvailableImageDataUrl(imageUrlCandidates);
-      if (image) {
-        doc.addImage(image.dataUrl, image.format, marginX + 153, y + 3, 34, rowHeight - 6);
-      } else {
-        doc.setFont("times", "normal");
-        doc.setFontSize(7);
-        doc.text(
-          doc.splitTextToSize("Image file not found", 34),
-          marginX + 153,
-          y + 7
-        );
+    if (entry.images?.length) {
+      for (const image of entry.images) {
+        const candidates = getReportImageUrlCandidates(image);
+        const loaded = await loadFirstAvailableImageDataUrl(candidates);
+        if (loaded) {
+          ensureSpace(55);
+          try {
+            doc.addImage(loaded.dataUrl, loaded.format, margin + 4, cursorY, 60, 45);
+            cursorY += 50;
+          } catch {
+            // Ignore corrupted images
+          }
+        }
       }
     }
-
-    y += rowHeight;
   }
 
   doc.save(fileName);

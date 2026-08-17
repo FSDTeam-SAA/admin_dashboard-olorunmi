@@ -82,7 +82,7 @@ function ResetPasswordContent() {
         }}
       >
         <div className="relative">
-          <Lock className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#9a9a9a]" />
+          <Lock className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500 dark:text-slate-300" />
           <Input
             type={showPassword ? "text" : "password"}
             placeholder="Create Password"
@@ -93,7 +93,7 @@ function ResetPasswordContent() {
           />
           <button
             type="button"
-            className="absolute top-1/2 right-3 -translate-y-1/2 text-[#8f8f8f]"
+            className="absolute top-1/2 right-3 -translate-y-1/2 text-slate-500 hover:text-text-primary dark:text-slate-400"
             onClick={() => setShowPassword((previous) => !previous)}
           >
             {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -101,7 +101,7 @@ function ResetPasswordContent() {
         </div>
 
         <div className="relative">
-          <Lock className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#9a9a9a]" />
+          <Lock className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500 dark:text-slate-300" />
           <Input
             type={showConfirmPassword ? "text" : "password"}
             placeholder="Confirm Password"
@@ -112,7 +112,7 @@ function ResetPasswordContent() {
           />
           <button
             type="button"
-            className="absolute top-1/2 right-3 -translate-y-1/2 text-[#8f8f8f]"
+            className="absolute top-1/2 right-3 -translate-y-1/2 text-slate-500 hover:text-text-primary dark:text-slate-400"
             onClick={() => setShowConfirmPassword((previous) => !previous)}
           >
             {showConfirmPassword ? (

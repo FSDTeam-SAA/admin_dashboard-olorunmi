@@ -36,7 +36,7 @@ export default function ForgotPasswordPage() {
         }}
       >
         <div className="relative">
-          <Mail className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#9a9a9a]" />
+          <Mail className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500 dark:text-slate-300" />
           <Input
             type="email"
             placeholder="Email"

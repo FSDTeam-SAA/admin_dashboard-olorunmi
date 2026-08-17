@@ -118,33 +118,35 @@ export default function SettingsPage() {
       <PageHeader title="Settings" subtitle="Settings" />
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
+        <TabsList className="max-w-[400px]">
           <TabsTrigger value="personal">Personal Information</TabsTrigger>
           <TabsTrigger value="password">Change Password</TabsTrigger>
         </TabsList>
 
-        <Card className="rounded-xl bg-[#f4f4f4]">
-          <CardContent className="flex items-center gap-3 p-4">
+        <Card className="rounded-xl border-border bg-card">
+          <CardContent className="flex items-center gap-3.5 p-4 sm:p-5">
             {profileQuery.isLoading ? (
               <>
-                <Skeleton className="size-12 rounded-full" />
+                <Skeleton className="size-14 rounded-full" />
                 <div className="space-y-2">
-                  <Skeleton className="h-4 w-28" />
-                  <Skeleton className="h-3 w-36" />
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-44" />
                 </div>
               </>
             ) : (
               <>
-                <Avatar className="size-12">
+                <Avatar className="size-14 border border-border">
                   <AvatarImage
                     src={draftAvatarPreviewUrl ?? profileQuery.data?.avatar?.url ?? ""}
                     alt={profileQuery.data?.name ?? "Profile"}
                   />
-                  <AvatarFallback>{getUserInitials(profileQuery.data?.name)}</AvatarFallback>
+                  <AvatarFallback className="font-bold">
+                    {getUserInitials(profileQuery.data?.name)}
+                  </AvatarFallback>
                 </Avatar>
                 <div>
-                  <p className="font-semibold text-[#1f1f1f]">{displayProfile.name}</p>
-                  <p className="text-sm text-[#535353]">{displayProfile.email}</p>
+                  <p className="font-bold text-text-primary">{displayProfile.name || "Olorunmi Admin"}</p>
+                  <p className="text-xs text-text-secondary">{displayProfile.email}</p>
                 </div>
               </>
             )}
@@ -152,16 +154,17 @@ export default function SettingsPage() {
         </Card>
 
         <TabsContent value="personal">
-          <Card className="rounded-xl bg-[#f4f4f4]">
+          <Card className="rounded-xl border-border bg-card">
             <CardHeader className="flex flex-row items-center justify-between px-4 pb-0 pt-4 sm:px-6">
               <CardTitle>Personal Information</CardTitle>
               <Button
                 variant={isEditing ? "secondary" : "default"}
-                className="h-10 px-4"
+                size="sm"
+                className="h-9 px-4"
                 onClick={startEdit}
               >
                 <PencilLine className="size-4" />
-                {isEditing ? "Cancel" : "Edit"}
+                {isEditing ? "Cancel" : "Edit Profile"}
               </Button>
             </CardHeader>
 
@@ -186,10 +189,10 @@ export default function SettingsPage() {
                     });
                   }}
                 >
-                  <div className="space-y-1.5">
-                    <Label>Profile Image</Label>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-text-tertiary">Profile Image</Label>
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                      <Avatar className="size-16 border border-[#d8d8d8]">
+                      <Avatar className="size-16 border border-border">
                         <AvatarImage
                           src={draftAvatarPreviewUrl ?? profileQuery.data?.avatar?.url ?? ""}
                           alt={displayProfile.name || "Profile"}
@@ -200,13 +203,13 @@ export default function SettingsPage() {
                       <div className="space-y-1.5">
                         <label
                           htmlFor="profile-avatar-upload"
-                          className={`inline-flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 text-sm font-medium transition-colors ${
+                          className={`inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg px-4 text-xs font-semibold shadow-xs transition-colors ${
                             isEditing
-                              ? "bg-[#a79663] text-white hover:bg-[#8f7f52]"
-                              : "bg-[#e2e2e2] text-[#6a6a6a]"
+                              ? "bg-blue-600 text-white hover:bg-blue-700 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+                              : "bg-secondary-bg text-text-tertiary opacity-50 cursor-not-allowed"
                           }`}
                         >
-                          <Upload className="size-4" />
+                          <Upload className="size-3.5" />
                           Upload Image
                         </label>
                         <input
@@ -234,15 +237,15 @@ export default function SettingsPage() {
                             setDraftAvatarFile(nextFile);
                           }}
                         />
-                        <p className="text-xs text-[#6b6b6b]">
-                          JPG/PNG/WEBP. Max 5MB.
+                        <p className="text-xs text-text-quaternary">
+                          JPG, PNG or WEBP. Max 5MB.
                         </p>
                       </div>
                     </div>
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label>Name</Label>
+                    <Label className="text-xs text-text-tertiary">Full Name</Label>
                     <Input
                       value={displayProfile.name}
                       onChange={(event) =>
@@ -258,11 +261,11 @@ export default function SettingsPage() {
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-1.5">
-                      <Label>Email Address</Label>
+                      <Label className="text-xs text-text-tertiary">Email Address</Label>
                       <Input value={displayProfile.email} readOnly className="opacity-75" />
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Phone</Label>
+                      <Label className="text-xs text-text-tertiary">Phone Number</Label>
                       <Input
                         value={displayProfile.phone}
                         onChange={(event) =>
@@ -278,7 +281,7 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label>Bio</Label>
+                    <Label className="text-xs text-text-tertiary">Bio / Role Notes</Label>
                     <Textarea
                       value={displayProfile.bio}
                       onChange={(event) =>
@@ -289,26 +292,26 @@ export default function SettingsPage() {
                         }))
                       }
                       readOnly={!isEditing}
-                      className="min-h-[120px]"
+                      className="min-h-[100px] border-border bg-input-bg text-foreground"
                     />
                   </div>
 
                   {isEditing ? (
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-3 sm:grid-cols-2 pt-2">
                       <Button
                         type="button"
                         variant="outline"
-                        className="h-11"
+                        className="h-10"
                         onClick={() => {
                           setIsEditing(false);
                           setDraftProfile(null);
                           setDraftAvatarFile(null);
                         }}
                       >
-                        Not Now
+                        Cancel
                       </Button>
-                      <Button type="submit" className="h-11" disabled={profileMutation.isPending}>
-                        {profileMutation.isPending ? "Saving..." : "Save Change"}
+                      <Button type="submit" className="h-10" disabled={profileMutation.isPending}>
+                        {profileMutation.isPending ? "Saving..." : "Save Changes"}
                       </Button>
                     </div>
                   ) : null}
@@ -319,7 +322,7 @@ export default function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="password">
-          <Card className="rounded-xl bg-[#f4f4f4]">
+          <Card className="rounded-xl border-border bg-card">
             <CardContent className="space-y-4 px-4 py-4 sm:px-6 sm:py-5">
               <form
                 className="space-y-4"
@@ -339,7 +342,7 @@ export default function SettingsPage() {
                 }}
               >
                 <div className="space-y-1.5">
-                  <Label>Current Password</Label>
+                  <Label className="text-xs text-text-tertiary">Current Password</Label>
                   <div className="relative">
                     <Input
                       type={showCurrentPassword ? "text" : "password"}
@@ -351,7 +354,7 @@ export default function SettingsPage() {
                     <button
                       type="button"
                       onClick={() => setShowCurrentPassword((previous) => !previous)}
-                      className="absolute top-1/2 right-3 -translate-y-1/2 text-[#7a7a7a]"
+                      className="absolute top-1/2 right-3 -translate-y-1/2 text-text-tertiary hover:text-text-primary"
                     >
                       {showCurrentPassword ? (
                         <EyeOff className="size-4" />
@@ -363,7 +366,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>New Password</Label>
+                  <Label className="text-xs text-text-tertiary">New Password</Label>
                   <div className="relative">
                     <Input
                       type={showNewPassword ? "text" : "password"}
@@ -375,7 +378,7 @@ export default function SettingsPage() {
                     <button
                       type="button"
                       onClick={() => setShowNewPassword((previous) => !previous)}
-                      className="absolute top-1/2 right-3 -translate-y-1/2 text-[#7a7a7a]"
+                      className="absolute top-1/2 right-3 -translate-y-1/2 text-text-tertiary hover:text-text-primary"
                     >
                       {showNewPassword ? (
                         <EyeOff className="size-4" />
@@ -387,7 +390,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>Confirm New Password</Label>
+                  <Label className="text-xs text-text-tertiary">Confirm New Password</Label>
                   <div className="relative">
                     <Input
                       type={showConfirmPassword ? "text" : "password"}
@@ -399,7 +402,7 @@ export default function SettingsPage() {
                     <button
                       type="button"
                       onClick={() => setShowConfirmPassword((previous) => !previous)}
-                      className="absolute top-1/2 right-3 -translate-y-1/2 text-[#7a7a7a]"
+                      className="absolute top-1/2 right-3 -translate-y-1/2 text-text-tertiary hover:text-text-primary"
                     >
                       {showConfirmPassword ? (
                         <EyeOff className="size-4" />
@@ -410,11 +413,11 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3 sm:grid-cols-2 pt-2">
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-11"
+                    className="h-10"
                     onClick={() => {
                       setCurrentPassword("");
                       setNewPassword("");
@@ -424,10 +427,10 @@ export default function SettingsPage() {
                       setShowConfirmPassword(false);
                     }}
                   >
-                    Not Now
+                    Reset Form
                   </Button>
-                  <Button type="submit" className="h-11" disabled={passwordMutation.isPending}>
-                    {passwordMutation.isPending ? "Saving..." : "Save Change"}
+                  <Button type="submit" className="h-10" disabled={passwordMutation.isPending}>
+                    {passwordMutation.isPending ? "Saving..." : "Change Password"}
                   </Button>
                 </div>
               </form>
