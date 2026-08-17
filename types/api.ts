@@ -158,6 +158,42 @@ export type AlertsListResponse = {
   pagination: PaginationMeta;
 };
 
+export type SosAlertItem = {
+  _id: string;
+  user?: {
+    _id: string;
+    name?: string;
+    userId?: string;
+    site?: string;
+    phone?: string;
+    avatar?: {
+      public_id?: string;
+      url?: string;
+    };
+  };
+  location?: {
+    latitude?: number;
+    longitude?: number;
+  };
+  status: "pending" | "acknowledged";
+  triggeredAt: string;
+  acknowledgedAt?: string | null;
+  acknowledgedBy?: {
+    _id: string;
+    name?: string;
+    userId?: string;
+  } | null;
+  workDate?: string;
+  timezone?: string;
+  localTime?: string;
+  localDateTime?: string;
+};
+
+export type SosAlertsListResponse = {
+  alerts: SosAlertItem[];
+  pagination: PaginationMeta;
+};
+
 export type ReportsListResponse = {
   reports: ReportItem[];
   pagination: PaginationMeta;

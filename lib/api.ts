@@ -7,6 +7,8 @@ import type {
   ChecklistItem,
   ReportItem,
   ReportsListResponse,
+  SosAlertItem,
+  SosAlertsListResponse,
   UserDetailsResponse,
   UserListItem,
   WeeklyLocations,
@@ -252,6 +254,32 @@ export const sendAlert = async (id: string) => {
 export const deleteAlert = async (id: string) => {
   const response = await apiClient.delete<ApiResponse<null>>(
     `/checklist/admin/alerts/${id}`
+  );
+
+  return response.data;
+};
+
+export const getSosAlerts = async (params: {
+  status?: "pending" | "acknowledged" | "all";
+  user?: string;
+  page?: number;
+  limit?: number;
+}) => {
+  const response = await apiClient.get<ApiResponse<SosAlertsListResponse>>("/sos", {
+    params: {
+      status: params.status ?? "pending",
+      page: params.page ?? 1,
+      limit: params.limit ?? 20,
+      ...(params.user && params.user !== "all" ? { user: params.user } : {}),
+    },
+  });
+
+  return response.data.data;
+};
+
+export const acknowledgeSosAlert = async (id: string) => {
+  const response = await apiClient.post<ApiResponse<SosAlertItem>>(
+    `/sos/${id}/acknowledge`
   );
 
   return response.data;

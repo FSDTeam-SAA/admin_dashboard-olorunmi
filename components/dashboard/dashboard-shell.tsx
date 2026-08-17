@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
+import { SosAlertWatcher } from "@/components/dashboard/sos-alert-watcher";
 import { DashboardTopbar } from "@/components/dashboard/topbar";
 import { getApiMessage, logoutUser } from "@/lib/api";
 
@@ -37,6 +38,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <DashboardTopbar />
         <div className="px-4 pb-6 pt-6 sm:px-6 lg:px-8">{children}</div>
       </div>
+
+      <SosAlertWatcher />
 
       <ConfirmDialog
         open={logoutOpen}
