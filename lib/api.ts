@@ -7,6 +7,7 @@ import type {
   ChecklistItem,
   ReportItem,
   ReportsListResponse,
+  SiteItem,
   SosAlertItem,
   SosAlertsListResponse,
   UserDetailsResponse,
@@ -226,6 +227,7 @@ export const getAlerts = async (params: {
   page: number;
   limit: number;
   search?: string;
+  latestPerUser?: boolean;
 }) => {
   const response = await apiClient.get<ApiResponse<AlertsListResponse>>(
     "/checklist/admin/alerts",
@@ -300,4 +302,80 @@ export const getReports = async (params: {
 export const getMyReports = async () => {
   const response = await apiClient.get<ApiResponse<ReportItem[]>>("/report/me");
   return response.data.data;
+};
+
+export const getSites = async (params?: { search?: string }) => {
+  const response = await apiClient.get<ApiResponse<SiteItem[]>>("/site", {
+    params,
+  });
+
+  return response.data.data;
+};
+
+export const createSite = async (payload: { name: string }) => {
+  const response = await apiClient.post<ApiResponse<SiteItem>>("/site", payload);
+
+  return response.data;
+};
+
+export const updateSite = async ({ id, ...payload }: { id: string; name: string }) => {
+  const response = await apiClient.patch<ApiResponse<SiteItem>>(`/site/${id}`, payload);
+
+  return response.data;
+};
+
+export const deleteSite = async (id: string) => {
+  const response = await apiClient.delete<ApiResponse<SiteItem>>(`/site/${id}`);
+
+  return response.data;
+};
+
+export const createSiteLocation = async ({
+  siteId,
+  ...payload
+}: {
+  siteId: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+}) => {
+  const response = await apiClient.post<ApiResponse<SiteItem>>(
+    `/site/${siteId}/locations`,
+    payload
+  );
+
+  return response.data;
+};
+
+export const updateSiteLocation = async ({
+  siteId,
+  locationId,
+  ...payload
+}: {
+  siteId: string;
+  locationId: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+}) => {
+  const response = await apiClient.patch<ApiResponse<SiteItem>>(
+    `/site/${siteId}/locations/${locationId}`,
+    payload
+  );
+
+  return response.data;
+};
+
+export const deleteSiteLocation = async ({
+  siteId,
+  locationId,
+}: {
+  siteId: string;
+  locationId: string;
+}) => {
+  const response = await apiClient.delete<ApiResponse<SiteItem>>(
+    `/site/${siteId}/locations/${locationId}`
+  );
+
+  return response.data;
 };

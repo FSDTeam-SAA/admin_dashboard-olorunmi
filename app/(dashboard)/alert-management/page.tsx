@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -11,6 +11,7 @@ import {
   Eye,
   Filter,
   MapPin,
+  RotateCcw,
   Search,
   Trash2,
   User as UserIcon,
@@ -117,6 +118,24 @@ const getAlertBadgeConfig = (status: ChecklistItem["status"] | string): AlertBad
   }
 };
 
+const ALERT_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: "re_checked_in", label: "Check-In: OK" },
+  { value: "checked_in_not_ok", label: "Check-In: NOT OK" },
+  { value: "checked_in_missed", label: "Missed Check-In" },
+  { value: "checked_in", label: "Booked-In" },
+  { value: "checked_out", label: "Booked-Off" },
+  { value: "user_outside_radius", label: "Out of Location" },
+  { value: "back_inside_radius", label: "Back Inside Radius" },
+  { value: "testing_alert", label: "Testing Alert" },
+];
+
+// Most recent activity moment on an alert, used to pick a user's latest alert.
+const getAlertTimestamp = (alert: ChecklistItem) => {
+  const value = alert.checkOutAt || alert.checkInAt || alert.workDate;
+
+  return value ? new Date(value).getTime() : 0;
+};
+
 const getDeviceDate = () => {
   const now = new Date();
   const year = now.getFullYear();
@@ -133,7 +152,10 @@ export default function AlertManagementPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
 
-  const [dateRangeFilter, setDateRangeFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [dateRangeOpen, setDateRangeOpen] = useState(false);
+  const dateRangeRef = useRef<HTMLDivElement>(null);
   const [alertTypeFilter, setAlertTypeFilter] = useState("all");
   const [selectedUserFilter, setSelectedUserFilter] = useState("all");
   const [statusTab, setStatusTab] = useState<"all" | "unresolved" | "resolved">("all");
@@ -145,6 +167,7 @@ export default function AlertManagementPage() {
   const [viewAlert, setViewAlert] = useState<ChecklistItem | null>(null);
   const [viewDate, setViewDate] = useState(getDeviceDate);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [cardAlertType, setCardAlertType] = useState<string | null>(null);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -155,9 +178,22 @@ export default function AlertManagementPage() {
     return () => window.clearTimeout(timeoutId);
   }, [searchInput]);
 
+  useEffect(() => {
+    if (!dateRangeOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dateRangeRef.current && !dateRangeRef.current.contains(event.target as Node)) {
+        setDateRangeOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [dateRangeOpen]);
+
   const alertsQuery = useQuery({
     queryKey: QUERY_KEYS.alerts(page, search),
-    queryFn: () => getAlerts({ page, limit: PAGE_LIMIT, search }),
+    queryFn: () => getAlerts({ page, limit: PAGE_LIMIT, search, latestPerUser: true }),
     refetchInterval: REALTIME_REFETCH_INTERVAL,
     refetchIntervalInBackground: true,
   });
@@ -193,19 +229,46 @@ export default function AlertManagementPage() {
     },
   });
 
-  const rawAlerts = alertsQuery.data?.alerts ?? [];
+  const alertsData = alertsQuery.data?.alerts;
+
+  // The API already collapses this list to the latest alert per user
+  // (`latestPerUser`); this is a client-side safeguard so a user can never be
+  // rendered twice. Full per-user history stays available via the View dialog.
+  const rawAlerts = useMemo(() => {
+    const latestByUser = new Map<string, ChecklistItem>();
+
+    (alertsData ?? []).forEach((alert) => {
+      const userKey = alert.user?._id ?? alert._id;
+      const existing = latestByUser.get(userKey);
+
+      if (!existing || getAlertTimestamp(alert) > getAlertTimestamp(existing)) {
+        latestByUser.set(userKey, alert);
+      }
+    });
+
+    return [...latestByUser.values()].sort(
+      (first, second) => getAlertTimestamp(second) - getAlertTimestamp(first)
+    );
+  }, [alertsData]);
 
   // Filter alerts based on filters
   const filteredAlerts = useMemo(() => {
     return rawAlerts.filter((alert) => {
-      if (alertTypeFilter !== "all") {
-        if (alertTypeFilter === "missed_check_in" && alert.status !== "checked_in_missed") return false;
-        if (alertTypeFilter === "out_of_location" && alert.status !== "user_outside_radius") return false;
-        if (alertTypeFilter === "booked_off" && alert.status !== "checked_out") return false;
+      if (alertTypeFilter !== "all" && alert.status !== alertTypeFilter) {
+        return false;
       }
 
       if (selectedUserFilter !== "all" && alert.user?._id !== selectedUserFilter) {
         return false;
+      }
+
+      if (dateFrom || dateTo) {
+        const alertDateValue = alert.checkOutAt || alert.checkInAt;
+        const alertDate = alertDateValue ? alertDateValue.slice(0, 10) : "";
+
+        if (!alertDate) return false;
+        if (dateFrom && alertDate < dateFrom) return false;
+        if (dateTo && alertDate > dateTo) return false;
       }
 
       const isResolved = resolvedAlerts[alert._id];
@@ -214,29 +277,48 @@ export default function AlertManagementPage() {
 
       return true;
     });
-  }, [rawAlerts, alertTypeFilter, selectedUserFilter, statusTab, resolvedAlerts]);
+  }, [rawAlerts, alertTypeFilter, selectedUserFilter, dateFrom, dateTo, statusTab, resolvedAlerts]);
+
+  const hasActiveFilters = Boolean(dateFrom || dateTo || alertTypeFilter !== "all" || selectedUserFilter !== "all" || statusTab !== "all");
+
+  const handleClearFilters = () => {
+    setDateFrom("");
+    setDateTo("");
+    setDateRangeOpen(false);
+    setAlertTypeFilter("all");
+    setSelectedUserFilter("all");
+    setStatusTab("all");
+    setSearchInput("");
+    setSearch("");
+    setPage(1);
+  };
 
   // Calculate KPI Counts
   const kpiStats = useMemo(() => {
+    let bookedIn = 0;
     let missedCheckIn = 0;
     let outOfLocation = 0;
     let bookedOff = 0;
-    let testing = 0;
 
     rawAlerts.forEach((alert) => {
-      if (alert.status === "checked_in_missed") missedCheckIn++;
+      if (alert.status === "checked_in") bookedIn++;
+      else if (alert.status === "checked_in_missed") missedCheckIn++;
       else if (alert.status === "user_outside_radius") outOfLocation++;
       else if (alert.status === "checked_out") bookedOff++;
-      else testing++;
     });
 
-    return {
-      missedCheckIn: missedCheckIn || 12,
-      outOfLocation: outOfLocation || 4,
-      bookedOff: bookedOff || 18,
-      testing: testing || 3,
-    };
+    return { bookedIn, missedCheckIn, outOfLocation, bookedOff };
   }, [rawAlerts]);
+
+  // Alerts backing the card dialog. Reuses the same deduped `rawAlerts` list
+  // (latest alert per user) that the main table filters from.
+  const cardAlerts = useMemo(() => {
+    if (!cardAlertType) return [];
+
+    return rawAlerts.filter((alert) => alert.status === cardAlertType);
+  }, [rawAlerts, cardAlertType]);
+
+  const cardAlertLabel = cardAlertType ? getAlertBadgeConfig(cardAlertType).label : "";
 
   const pagination = alertsQuery.data?.pagination;
   const currentPage = pagination?.page ?? 1;
@@ -262,6 +344,103 @@ export default function AlertManagementPage() {
     toast.success("Alert marked as resolved");
   };
 
+  // Shared row renderer for the main table and the summary-card dialog, so
+  // Acknowledge/Resolve/View stay backed by the same handlers everywhere.
+  const renderAlertRow = (alert: ChecklistItem) => {
+    const badgeConfig = getAlertBadgeConfig(alert.status);
+    const AlertIcon = badgeConfig.icon;
+    const isAcknowledged = acknowledgedAlerts[alert._id];
+    const isResolved = resolvedAlerts[alert._id];
+
+    return (
+      <TableRow key={alert._id} className="transition-colors hover:bg-secondary-bg/50">
+        {/* User Name with Avatar */}
+        <TableCell>
+          <div className="flex items-center gap-3">
+            <Avatar className="size-9 shrink-0 border border-border">
+              <AvatarImage
+                src={(alert.user as unknown as { avatar?: { url?: string } })?.avatar?.url ?? ""}
+                alt={alert.user?.name ?? "User"}
+              />
+              <AvatarFallback className="text-xs font-bold">
+                {getUserInitials(alert.user?.name)}
+              </AvatarFallback>
+            </Avatar>
+            <span className="truncate text-sm font-semibold text-text-primary">
+              {alert.user?.name || "John Smith"}
+            </span>
+          </div>
+        </TableCell>
+
+        {/* User ID */}
+        <TableCell className="text-xs font-medium text-text-secondary">
+          {alert.user?.userId || "USR-1034"}
+        </TableCell>
+
+        {/* Date & Time */}
+        <TableCell className="text-xs text-text-secondary">
+          {alert.checkOutAt
+            ? formatDateTimeLabel(alert.checkOutAt)
+            : alert.checkInAt
+              ? formatDateTimeLabel(alert.checkInAt)
+              : "2023-12-15 10:21 AM"}
+        </TableCell>
+
+        {/* Alert Pill Badge */}
+        <TableCell>
+          <Badge variant={badgeConfig.variant} className="h-7 px-3 text-xs font-semibold">
+            <AlertIcon className="size-3.5" />
+            {badgeConfig.label}
+          </Badge>
+        </TableCell>
+
+        {/* Actions */}
+        <TableCell className="text-right">
+          <div className="flex items-center justify-end gap-1.5">
+            {/* Acknowledge Button */}
+            <Button
+              type="button"
+              variant="tealOutline"
+              size="sm"
+              className="h-8 rounded-md px-3 text-xs font-medium"
+              disabled={isAcknowledged}
+              onClick={() => handleAcknowledge(alert._id)}
+            >
+              {isAcknowledged ? "Acknowledged" : "Acknowledge"}
+            </Button>
+
+            {/* Resolve Button */}
+            <Button
+              type="button"
+              variant="slateOutline"
+              size="sm"
+              className="h-8 rounded-md px-3 text-xs font-medium"
+              disabled={isResolved}
+              onClick={() => handleResolve(alert._id)}
+            >
+              {isResolved ? "Resolved" : "Resolve"}
+            </Button>
+
+            {/* View Button */}
+            <Button
+              type="button"
+              variant="slateOutline"
+              size="sm"
+              className="h-8 rounded-md px-3 text-xs font-medium"
+              onClick={() => {
+                setViewAlert(alert);
+                setViewDate(getDeviceDate());
+                setViewModalOpen(true);
+              }}
+            >
+              View
+            </Button>
+          </div>
+        </TableCell>
+      </TableRow>
+    );
+  };
+
   return (
     <section className="space-y-6">
       {/* Top Header */}
@@ -274,20 +453,70 @@ export default function AlertManagementPage() {
       {/* Filter Row */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 shadow-xs">
         <div className="flex flex-wrap items-center gap-2.5">
-          {/* Date Range Dropdown */}
-          <div className="relative min-w-[130px]">
-            <Calendar className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-slate-600 dark:text-slate-200" />
-            <select
-              value={dateRangeFilter}
-              onChange={(e) => setDateRangeFilter(e.target.value)}
-              className="h-9 w-full appearance-none rounded-lg border border-border bg-card pl-8 pr-8 text-xs font-medium text-text-primary outline-none transition-colors hover:bg-secondary-bg focus:border-primary"
+          {/* Date Range Picker */}
+          <div className="relative min-w-[130px]" ref={dateRangeRef}>
+            <button
+              type="button"
+              onClick={() => setDateRangeOpen((prev) => !prev)}
+              className="flex h-9 w-full items-center gap-1.5 rounded-lg border border-border bg-card pl-2.5 pr-2.5 text-xs font-medium text-text-primary outline-none transition-colors hover:bg-secondary-bg focus:border-primary"
             >
-              <option value="all">Date Range</option>
-              <option value="today">Today</option>
-              <option value="yesterday">Yesterday</option>
-              <option value="week">This Week</option>
-            </select>
-            <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-slate-500 dark:text-slate-300" />
+              <Calendar className="size-3.5 shrink-0 text-slate-600 dark:text-slate-200" />
+              <span className="flex-1 truncate text-left">
+                {dateFrom || dateTo
+                  ? `${dateFrom || "…"} – ${dateTo || "…"}`
+                  : "Date Range"}
+              </span>
+              <ChevronDown className="size-3.5 shrink-0 text-slate-500 dark:text-slate-300" />
+            </button>
+
+            {dateRangeOpen ? (
+              <div className="absolute top-full left-0 z-20 mt-1.5 w-[260px] rounded-lg border border-border bg-card p-3 shadow-lg">
+                <div className="space-y-2.5">
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-text-tertiary">From</label>
+                    <Input
+                      type="date"
+                      value={dateFrom}
+                      max={dateTo || undefined}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                      className="h-8.5 w-full rounded-lg border border-border bg-card px-2.5 text-xs text-text-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-text-tertiary">To</label>
+                    <Input
+                      type="date"
+                      value={dateTo}
+                      min={dateFrom || undefined}
+                      onChange={(e) => setDateTo(e.target.value)}
+                      className="h-8.5 w-full rounded-lg border border-border bg-card px-2.5 text-xs text-text-primary"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 flex-1 text-xs"
+                    onClick={() => {
+                      setDateFrom("");
+                      setDateTo("");
+                    }}
+                  >
+                    Clear
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 flex-1 bg-teal-600 text-xs text-white hover:bg-teal-700"
+                    onClick={() => setDateRangeOpen(false)}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {/* Alert Type Dropdown */}
@@ -299,9 +528,11 @@ export default function AlertManagementPage() {
               className="h-9 w-full appearance-none rounded-lg border border-border bg-card pl-8 pr-8 text-xs font-medium text-text-primary outline-none transition-colors hover:bg-secondary-bg focus:border-primary"
             >
               <option value="all">Alert Type</option>
-              <option value="missed_check_in">Missed Check-In</option>
-              <option value="out_of_location">Out of Location</option>
-              <option value="booked_off">Booked-Off</option>
+              {ALERT_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
             <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-slate-500 dark:text-slate-300" />
           </div>
@@ -373,13 +604,56 @@ export default function AlertManagementPage() {
           >
             Search
           </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="h-9 gap-1.5 rounded-lg px-3 text-xs font-semibold"
+            disabled={!hasActiveFilters}
+            onClick={handleClearFilters}
+          >
+            <RotateCcw className="size-3.5" />
+            Clear Filter
+          </Button>
         </div>
       </div>
 
       {/* 4 Top KPI Summary Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Card 1: Missed Check-In (Red) */}
-        <div className="relative overflow-hidden rounded-xl bg-red-600 p-4 text-white shadow-xs transition-transform hover:-translate-y-0.5 dark:bg-red-800">
+        {/* Card 1: Booked-In (Green) */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setCardAlertType("checked_in")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") setCardAlertType("checked_in");
+          }}
+          className="relative cursor-pointer overflow-hidden rounded-xl bg-emerald-600 p-4 text-left text-white shadow-xs transition-transform hover:-translate-y-0.5 dark:bg-emerald-800"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-xs">
+              <CheckCircle2 className="size-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-white/90">Booked-In</p>
+              <div className="flex items-baseline justify-between">
+                <span className="text-2xl font-extrabold tracking-tight">{kpiStats.bookedIn}</span>
+                <span className="text-xs font-medium text-white/80">&rsaquo;</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2: Missed Check-In (Red) */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setCardAlertType("checked_in_missed")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") setCardAlertType("checked_in_missed");
+          }}
+          className="relative cursor-pointer overflow-hidden rounded-xl bg-red-600 p-4 text-left text-white shadow-xs transition-transform hover:-translate-y-0.5 dark:bg-red-800"
+        >
           <div className="flex items-center gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-xs">
               <span className="text-base font-black">!</span>
@@ -388,14 +662,22 @@ export default function AlertManagementPage() {
               <p className="text-xs font-medium text-white/90">Missed Check-In</p>
               <div className="flex items-baseline justify-between">
                 <span className="text-2xl font-extrabold tracking-tight">{kpiStats.missedCheckIn}</span>
-                <span className="text-xs font-medium text-white/80">7 &rsaquo;</span>
+                <span className="text-xs font-medium text-white/80">&rsaquo;</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Card 2: Out of Location (Orange) */}
-        <div className="relative overflow-hidden rounded-xl bg-orange-500 p-4 text-white shadow-xs transition-transform hover:-translate-y-0.5 dark:bg-orange-700">
+        {/* Card 3: Out of Location (Orange) */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setCardAlertType("user_outside_radius")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") setCardAlertType("user_outside_radius");
+          }}
+          className="relative cursor-pointer overflow-hidden rounded-xl bg-orange-500 p-4 text-left text-white shadow-xs transition-transform hover:-translate-y-0.5 dark:bg-orange-700"
+        >
           <div className="flex items-center gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-xs">
               <MapPin className="size-5" />
@@ -404,14 +686,22 @@ export default function AlertManagementPage() {
               <p className="text-xs font-medium text-white/90">Out of Location</p>
               <div className="flex items-baseline justify-between">
                 <span className="text-2xl font-extrabold tracking-tight">{kpiStats.outOfLocation}</span>
-                <span className="text-xs font-medium text-white/80">7 &rsaquo;</span>
+                <span className="text-xs font-medium text-white/80">&rsaquo;</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Card 3: Booked-Off (Blue) */}
-        <div className="relative overflow-hidden rounded-xl bg-blue-600 p-4 text-white shadow-xs transition-transform hover:-translate-y-0.5 dark:bg-blue-700">
+        {/* Card 4: Booked-Off (Blue) */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => setCardAlertType("checked_out")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") setCardAlertType("checked_out");
+          }}
+          className="relative cursor-pointer overflow-hidden rounded-xl bg-blue-600 p-4 text-left text-white shadow-xs transition-transform hover:-translate-y-0.5 dark:bg-blue-700"
+        >
           <div className="flex items-center gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-xs">
               <Calendar className="size-5" />
@@ -420,23 +710,7 @@ export default function AlertManagementPage() {
               <p className="text-xs font-medium text-white/90">Booked-Off</p>
               <div className="flex items-baseline justify-between">
                 <span className="text-2xl font-extrabold tracking-tight">{kpiStats.bookedOff}</span>
-                <span className="text-xs font-medium text-white/80">7 &rsaquo;</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 4: Testing (Slate/Neutral) */}
-        <div className="relative overflow-hidden rounded-xl border border-border bg-slate-100 p-4 text-slate-800 shadow-xs transition-transform hover:-translate-y-0.5 dark:border-slate-800 dark:bg-slate-800 dark:text-white">
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-white">
-              <UserIcon className="size-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-text-secondary">Testing</p>
-              <div className="flex items-baseline justify-between">
-                <span className="text-2xl font-extrabold tracking-tight">{kpiStats.testing}</span>
-                <ChevronDown className="size-4 text-text-tertiary" />
+                <span className="text-xs font-medium text-white/80">&rsaquo;</span>
               </div>
             </div>
           </div>
@@ -467,100 +741,7 @@ export default function AlertManagementPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredAlerts.map((alert) => {
-                    const badgeConfig = getAlertBadgeConfig(alert.status);
-                    const AlertIcon = badgeConfig.icon;
-                    const isAcknowledged = acknowledgedAlerts[alert._id];
-                    const isResolved = resolvedAlerts[alert._id];
-
-                    return (
-                      <TableRow key={alert._id} className="transition-colors hover:bg-secondary-bg/50">
-                        {/* User Name with Avatar */}
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <Avatar className="size-9 shrink-0 border border-border">
-                              <AvatarImage
-                                src={(alert.user as unknown as { avatar?: { url?: string } })?.avatar?.url ?? ""}
-                                alt={alert.user?.name ?? "User"}
-                              />
-                              <AvatarFallback className="text-xs font-bold">
-                                {getUserInitials(alert.user?.name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="truncate text-sm font-semibold text-text-primary">
-                              {alert.user?.name || "John Smith"}
-                            </span>
-                          </div>
-                        </TableCell>
-
-                        {/* User ID */}
-                        <TableCell className="text-xs font-medium text-text-secondary">
-                          {alert.user?.userId || "USR-1034"}
-                        </TableCell>
-
-                        {/* Date & Time */}
-                        <TableCell className="text-xs text-text-secondary">
-                          {alert.checkOutAt
-                            ? formatDateTimeLabel(alert.checkOutAt)
-                            : alert.checkInAt
-                              ? formatDateTimeLabel(alert.checkInAt)
-                              : "2023-12-15 10:21 AM"}
-                        </TableCell>
-
-                        {/* Alert Pill Badge */}
-                        <TableCell>
-                          <Badge variant={badgeConfig.variant} className="h-7 px-3 text-xs font-semibold">
-                            <AlertIcon className="size-3.5" />
-                            {badgeConfig.label}
-                          </Badge>
-                        </TableCell>
-
-                        {/* Actions */}
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {/* Acknowledge Button */}
-                            <Button
-                              type="button"
-                              variant="tealOutline"
-                              size="sm"
-                              className="h-8 rounded-md px-3 text-xs font-medium"
-                              disabled={isAcknowledged}
-                              onClick={() => handleAcknowledge(alert._id)}
-                            >
-                              {isAcknowledged ? "Acknowledged" : "Acknowledge"}
-                            </Button>
-
-                            {/* Resolve Button */}
-                            <Button
-                              type="button"
-                              variant="slateOutline"
-                              size="sm"
-                              className="h-8 rounded-md px-3 text-xs font-medium"
-                              disabled={isResolved}
-                              onClick={() => handleResolve(alert._id)}
-                            >
-                              {isResolved ? "Resolved" : "Resolve"}
-                            </Button>
-
-                            {/* View Button */}
-                            <Button
-                              type="button"
-                              variant="slateOutline"
-                              size="sm"
-                              className="h-8 rounded-md px-3 text-xs font-medium"
-                              onClick={() => {
-                                setViewAlert(alert);
-                                setViewDate(getDeviceDate());
-                                setViewModalOpen(true);
-                              }}
-                            >
-                              View
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
+                  filteredAlerts.map(renderAlertRow)
                 )}
               </TableBody>
             </Table>
@@ -689,6 +870,50 @@ export default function AlertManagementPage() {
               variant="outline"
               className="min-w-[120px]"
               onClick={() => setViewModalOpen(false)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Card Alert Type Dialog */}
+      <Dialog open={Boolean(cardAlertType)} onOpenChange={(value) => !value && setCardAlertType(null)}>
+        <DialogContent className="max-w-[900px] rounded-2xl border-border bg-card">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-text-primary">{cardAlertLabel} Alerts</DialogTitle>
+          </DialogHeader>
+
+          <div className="max-h-[520px] overflow-y-auto rounded-xl border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-b border-border bg-transparent">
+                  <TableHead className="w-[220px]">User Name</TableHead>
+                  <TableHead className="w-[140px]">User ID</TableHead>
+                  <TableHead className="w-[200px]">Date &amp; Time</TableHead>
+                  <TableHead className="w-[180px]">Alert</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {cardAlerts.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-12 text-center text-text-tertiary">
+                      No {cardAlertLabel} alerts found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  cardAlerts.map(renderAlertRow)
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          <DialogFooter className="flex-row justify-center sm:justify-center">
+            <Button
+              variant="outline"
+              className="min-w-[120px]"
+              onClick={() => setCardAlertType(null)}
             >
               Close
             </Button>

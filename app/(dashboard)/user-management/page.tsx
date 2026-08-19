@@ -63,7 +63,12 @@ import {
   updateUser,
 } from "@/lib/api";
 import { API_BASE_URL, QUERY_KEYS } from "@/lib/constants";
-import { formatDateLabel, formatDateTimeLabel, getUserInitials } from "@/lib/utils";
+import {
+  formatDateLabel,
+  formatDateTimeLabel,
+  formatTimeLabel,
+  getUserInitials,
+} from "@/lib/utils";
 import type { LocationPoint, ReportItem, UserListItem } from "@/types/api";
 
 const PAGE_LIMIT = 9;
@@ -178,12 +183,6 @@ const getActivityLabel = (kind: UserActivity["kind"]) => {
       return "Booked-In";
   }
 };
-
-const formatTimeLabel = (dateValue: string | Date) =>
-  new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(dateValue));
 
 const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -1348,7 +1347,7 @@ async function downloadReportPdf(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.text(
-    `Generated: ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date())}`,
+    `Generated: ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", hour12: false }).format(new Date())}`,
     margin + 26,
     cursorY + 16
   );

@@ -12,4 +12,5 @@ export const QUERY_KEYS = {
   userChecklists: (userId?: string, date?: string) =>
     ["user-checklists", userId, date] as const,
   reports: (userId: string) => ["reports", userId] as const,
+  sites: (search = "") => ["sites", search] as const,
 };

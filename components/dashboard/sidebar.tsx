@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, LogOut, Menu, Settings, Users } from "lucide-react";
+import { AlertTriangle, LogOut, MapPin, Menu, Settings, Users } from "lucide-react";
 import { useSession } from "next-auth/react";
 
 import { AppLogo } from "@/components/common/app-logo";
@@ -25,6 +25,11 @@ const navItems = [
     href: "/user-management",
     label: "User Management",
     icon: Users,
+  },
+  {
+    href: "/location-management",
+    label: "Location Management",
+    icon: MapPin,
   },
   {
     href: "/alert-management",

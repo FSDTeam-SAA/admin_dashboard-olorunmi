@@ -7,6 +7,7 @@ export type ApiResponse<T> = {
 export type LocationPoint = {
   day?: string;
   site?: string;
+  locationName?: string;
   onShift?: string;
   offShift?: string;
   latitude?: number | null;
@@ -197,4 +198,21 @@ export type SosAlertsListResponse = {
 export type ReportsListResponse = {
   reports: ReportItem[];
   pagination: PaginationMeta;
+};
+
+export type SiteLocation = {
+  _id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type SiteItem = {
+  _id: string;
+  name: string;
+  locations: SiteLocation[];
+  createdAt?: string;
+  updatedAt?: string;
 };

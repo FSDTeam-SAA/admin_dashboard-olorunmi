@@ -20,8 +20,19 @@ export function formatDateTimeLabel(dateValue: string | Date) {
     month: "long",
     day: "numeric",
     year: "numeric",
-    hour: "numeric",
+    hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+// Shared 24-hour time formatter; reuse this for every time-only display.
+export function formatTimeLabel(dateValue: string | Date) {
+  const date = new Date(dateValue);
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
   }).format(date);
 }
 
