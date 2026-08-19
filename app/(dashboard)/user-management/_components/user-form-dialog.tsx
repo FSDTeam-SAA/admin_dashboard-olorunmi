@@ -632,29 +632,19 @@ function WeeklyLocationsInput({
                 </label>
               </div>
 
-              <IconInput
-                icon={Clock}
-                type="time"
-                lang="en-GB"
+              <Time24Input
                 aria-label="On Shift"
-                title="On Shift"
+                title="On Shift (24-hour)"
                 value={isWeekend ? "" : row.onShift}
-                onChange={(event) =>
-                  updateRow(index, "onShift", event.target.value)
-                }
+                onValueChange={(nextValue) => updateRow(index, "onShift", nextValue)}
                 disabled={isWeekend}
               />
 
-              <IconInput
-                icon={Clock}
-                type="time"
-                lang="en-GB"
+              <Time24Input
                 aria-label="Off Shift"
-                title="Off Shift"
+                title="Off Shift (24-hour)"
                 value={isWeekend ? "" : row.offShift}
-                onChange={(event) =>
-                  updateRow(index, "offShift", event.target.value)
-                }
+                onValueChange={(nextValue) => updateRow(index, "offShift", nextValue)}
                 disabled={isWeekend}
               />
 
@@ -732,6 +722,65 @@ function IconInput({
       <Icon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500 dark:text-slate-300" />
       <Input className={`pl-9 ${className ?? ""}`} {...props} />
     </div>
+  );
+}
+
+// Digits the user has typed so far, stripped of everything else and capped at HHMM.
+const extractTimeDigits = (value: string) => value.replace(/\D/g, "").slice(0, 4);
+
+const clampTimeDigits = (digits: string) => {
+  if (digits.length < 2) return digits;
+
+  const hour = Math.min(Number(digits.slice(0, 2)), 23)
+    .toString()
+    .padStart(2, "0");
+
+  if (digits.length === 2) return hour;
+
+  const minute = Math.min(Number(digits.slice(2, 4)), 59)
+    .toString()
+    .padStart(2, "0");
+
+  return `${hour}${minute}`;
+};
+
+const formatTimeDigits = (digits: string) =>
+  digits.length <= 2 ? digits : `${digits.slice(0, 2)}:${digits.slice(2, 4)}`;
+
+/**
+ * 24-hour-only time field. Native `<input type="time">` renders with AM/PM on
+ * some browser/OS combinations regardless of `lang`, so this is a plain masked
+ * text input instead — it can only ever produce "HH:mm", no meridiem to strip.
+ */
+function Time24Input({
+  value,
+  onValueChange,
+  ...props
+}: Omit<ComponentProps<typeof Input>, "value" | "onChange" | "type"> & {
+  value: string;
+  onValueChange: (value: string) => void;
+}) {
+  return (
+    <IconInput
+      icon={Clock}
+      type="text"
+      inputMode="numeric"
+      placeholder="--:--"
+      maxLength={5}
+      value={value}
+      onChange={(event) =>
+        onValueChange(formatTimeDigits(clampTimeDigits(extractTimeDigits(event.target.value))))
+      }
+      onBlur={(event) => {
+        const digits = extractTimeDigits(event.target.value);
+        if (digits.length === 0 || digits.length === 4) return;
+
+        const hourDigits = digits.length === 1 ? `0${digits}` : digits;
+        const hour = clampTimeDigits(hourDigits).slice(0, 2);
+        onValueChange(`${hour}:00`);
+      }}
+      {...props}
+    />
   );
 }
 
