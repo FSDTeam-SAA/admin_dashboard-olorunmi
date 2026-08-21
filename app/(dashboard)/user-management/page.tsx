@@ -268,6 +268,7 @@ export default function UserManagementPage() {
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateRangeFilter, setDateRangeFilter] = useState("all");
+  const [dateRangeReferenceTime, setDateRangeReferenceTime] = useState(0);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserListItem | null>(null);
@@ -365,7 +366,8 @@ export default function UserManagementPage() {
       if (dateRangeFilter !== "all") {
         if (!user.createdAt) return true;
         const created = new Date(user.createdAt).getTime();
-        const now = Date.now();
+        const now = dateRangeReferenceTime;
+        if (!now) return true;
         if (dateRangeFilter === "today") {
           return now - created <= 24 * 60 * 60 * 1000;
         }
@@ -378,7 +380,7 @@ export default function UserManagementPage() {
       }
       return true;
     });
-  }, [rawUsers, roleFilter, statusFilter, dateRangeFilter]);
+  }, [rawUsers, roleFilter, statusFilter, dateRangeFilter, dateRangeReferenceTime]);
 
   const pagination = usersQuery.data?.pagination;
   const totalPages = pagination?.totalPages ?? 1;
@@ -401,6 +403,11 @@ export default function UserManagementPage() {
     }
 
     createMutation.mutate(payload);
+  };
+
+  const handleDateRangeFilterChange = (value: string) => {
+    setDateRangeFilter(value);
+    setDateRangeReferenceTime(value === "all" ? 0 : Date.now());
   };
 
   const selectedUser = detailsQuery.data?.user;
@@ -507,7 +514,7 @@ export default function UserManagementPage() {
           </div>
           <select
             value={dateRangeFilter}
-            onChange={(e) => setDateRangeFilter(e.target.value)}
+            onChange={(e) => handleDateRangeFilterChange(e.target.value)}
             className="h-10 w-full appearance-none rounded-lg border border-border bg-card pl-9 pr-8 text-xs font-medium text-text-primary outline-none transition-colors hover:bg-secondary-bg focus:border-primary"
           >
             <option value="all">Date Range</option>
