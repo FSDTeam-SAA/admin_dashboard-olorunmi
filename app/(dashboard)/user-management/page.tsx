@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { jsPDF } from "jspdf";
 import {
   AlertTriangle,
   Building2,
@@ -1300,6 +1299,10 @@ async function downloadReportPdf(
   fileName: string,
   user?: UserListItem
 ) {
+  // jsPDF is only needed when an admin actually exports a report, so it is
+  // loaded on demand instead of shipping in the User Management route bundle.
+  const { jsPDF } = await import("jspdf");
+
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
   const logoUrl = `${window.location.origin}/logo-rss.png`;
   const logo = await loadImageDataUrl(logoUrl);

@@ -201,6 +201,10 @@ export default function AlertManagementPage() {
   const usersQuery = useQuery({
     queryKey: ["users-filter-list"],
     queryFn: () => getUsers({ page: 1, limit: 100 }),
+    // This only populates the filter dropdown. It is shared with the other
+    // dashboard tabs via the query key, so a longer stale window stops a heavy
+    // 100-user payload being refetched on every tab switch.
+    staleTime: 5 * 60 * 1000,
   });
 
   const viewUserId = viewAlert?.user?._id;
