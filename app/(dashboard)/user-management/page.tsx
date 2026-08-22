@@ -423,6 +423,11 @@ export default function UserManagementPage() {
     createMutation.mutate(payload);
   };
 
+  const handleDateRangeFilterChange = (value: string) => {
+    setDateRangeFilter(value);
+    setDateRangeReferenceTime(value === "all" ? 0 : Date.now());
+  };
+
   const selectedUser = detailsQuery.data?.user;
   const reports = detailsQuery.data?.reports ?? [];
 

@@ -29,6 +29,7 @@ export const config = {
   matcher: [
     "/",
     "/user-management/:path*",
+    "/location-management/:path*",
     "/alert-management/:path*",
     "/settings/:path*",
     "/login",
