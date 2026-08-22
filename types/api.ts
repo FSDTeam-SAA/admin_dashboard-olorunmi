@@ -67,7 +67,8 @@ export type UserListItem = {
   bio?: string;
   address?: string;
   userId?: string;
-  role?: string;
+  role?: "user" | "admin" | string;
+  status?: "active" | "disabled";
   textPassword?: string;
   avatar?: {
     public_id?: string;
@@ -154,8 +155,17 @@ export type UserDetailsResponse = {
   reports: ReportItem[];
 };
 
+export type AlertCardCounts = {
+  bookedIn: number;
+  missedCheckIn: number;
+  outOfLocation: number;
+  bookedOff: number;
+};
+
 export type AlertsListResponse = {
   alerts: ChecklistItem[];
+  // Omitted for the summary-card "raw type" list mode.
+  counts?: AlertCardCounts;
   pagination: PaginationMeta;
 };
 

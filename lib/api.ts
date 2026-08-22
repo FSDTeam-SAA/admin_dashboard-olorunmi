@@ -122,6 +122,7 @@ export const getUsers = async (params: {
   page: number;
   limit: number;
   search?: string;
+  role?: string;
 }) => {
   const response = await apiClient.get<ApiResponse<UsersListResponse>>("/user/admin/list", {
     params,
@@ -218,6 +219,15 @@ export const updateUser = async (
   return response.data;
 };
 
+export const updateUserStatus = async (id: string, status: "active" | "disabled") => {
+  const response = await apiClient.patch<ApiResponse<UserListItem>>(
+    `/user/admin/list/${id}`,
+    { status }
+  );
+
+  return response.data;
+};
+
 export const deleteUser = async (id: string) => {
   const response = await apiClient.delete<ApiResponse<null>>(`/user/admin/list/${id}`);
   return response.data;
@@ -228,6 +238,14 @@ export const getAlerts = async (params: {
   limit: number;
   search?: string;
   latestPerUser?: boolean;
+  dateFrom?: string;
+  dateTo?: string;
+  alertType?: string;
+  user?: string;
+  // A single alert status here fetches the raw (undeduped) event list for
+  // that type — used by the summary-card dialogs so their row count matches
+  // the card's own total.
+  type?: string;
 }) => {
   const response = await apiClient.get<ApiResponse<AlertsListResponse>>(
     "/checklist/admin/alerts",

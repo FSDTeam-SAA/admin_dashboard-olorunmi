@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Building2,
-  Calendar,
   Check,
   CheckCircle2,
   Clock,
@@ -36,6 +36,8 @@ import {
   type UserFormPayload,
 } from "./_components/user-form-dialog";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
+import { DateRangeFilter } from "@/components/common/date-range-filter";
+import { PageSizeSelect } from "@/components/common/page-size-select";
 import { PaginationControls } from "@/components/common/pagination-controls";
 import { TableSkeleton } from "@/components/dashboard/table-skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -60,6 +62,7 @@ import {
   getUserDetails,
   getUsers,
   updateUser,
+  updateUserStatus,
 } from "@/lib/api";
 import { API_BASE_URL, QUERY_KEYS } from "@/lib/constants";
 import {
@@ -70,7 +73,7 @@ import {
 } from "@/lib/utils";
 import type { LocationPoint, ReportItem, UserListItem } from "@/types/api";
 
-const PAGE_LIMIT = 9;
+const DEFAULT_PAGE_SIZE = 10;
 const WEEK_DAY_KEYS = [
   "sunday",
   "monday",
@@ -259,19 +262,26 @@ const getPreferredShift = (
   return isOffDayLocation(location) ? "-" : location?.[field] || user[field] || "-";
 };
 
+const isUserDisabled = (user: UserListItem) =>
+  (user as unknown as { isActive?: boolean }).isActive === false || user.status === "disabled";
+
 export default function UserManagementPage() {
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState("user");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [dateRangeFilter, setDateRangeFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [dateRangeOpen, setDateRangeOpen] = useState(false);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserListItem | null>(null);
-  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  const [deleteTargetUser, setDeleteTargetUser] = useState<UserListItem | null>(null);
   const [toggleStatusUser, setToggleStatusUser] = useState<UserListItem | null>(null);
 
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -289,8 +299,8 @@ export default function UserManagementPage() {
   }, [searchInput]);
 
   const usersQuery = useQuery({
-    queryKey: QUERY_KEYS.users(page, search),
-    queryFn: () => getUsers({ page, limit: PAGE_LIMIT, search }),
+    queryKey: QUERY_KEYS.users(page, pageSize, search, roleFilter),
+    queryFn: () => getUsers({ page, limit: pageSize, search, role: roleFilter }),
   });
 
   const detailsQuery = useQuery({
@@ -339,12 +349,25 @@ export default function UserManagementPage() {
     mutationFn: deleteUser,
     onSuccess: (response) => {
       toast.success(response.message || "User deleted successfully");
-      setDeleteUserId(null);
+      setDeleteTargetUser(null);
       queryClient.invalidateQueries({ queryKey: ["users"] });
       queryClient.invalidateQueries({ queryKey: ["alerts"] });
     },
     onError: (error) => {
       toast.error(getApiMessage(error, "Unable to delete user"));
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: "active" | "disabled" }) =>
+      updateUserStatus(id, status),
+    onSuccess: (response) => {
+      toast.success(response.message || "User status updated");
+      setToggleStatusUser(null);
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (error) => {
+      toast.error(getApiMessage(error, "Unable to update user status"));
     },
   });
 
@@ -354,7 +377,7 @@ export default function UserManagementPage() {
   const filteredUsers = useMemo(() => {
     return rawUsers.filter((user) => {
       if (roleFilter !== "all") {
-        const userRole = (user.role || "guard").toLowerCase();
+        const userRole = (user.role || "user").toLowerCase();
         if (userRole !== roleFilter.toLowerCase()) return false;
       }
       if (statusFilter !== "all") {
@@ -362,27 +385,24 @@ export default function UserManagementPage() {
         if (statusFilter === "active" && !isUserActive) return false;
         if (statusFilter === "disabled" && isUserActive) return false;
       }
-      if (dateRangeFilter !== "all") {
-        if (!user.createdAt) return true;
-        const created = new Date(user.createdAt).getTime();
-        const now = Date.now();
-        if (dateRangeFilter === "today") {
-          return now - created <= 24 * 60 * 60 * 1000;
-        }
-        if (dateRangeFilter === "week") {
-          return now - created <= 7 * 24 * 60 * 60 * 1000;
-        }
-        if (dateRangeFilter === "month") {
-          return now - created <= 30 * 24 * 60 * 60 * 1000;
-        }
+      if (dateFrom || dateTo) {
+        const createdDate = user.createdAt ? user.createdAt.slice(0, 10) : "";
+
+        if (!createdDate) return false;
+        if (dateFrom && createdDate < dateFrom) return false;
+        if (dateTo && createdDate > dateTo) return false;
       }
       return true;
     });
-  }, [rawUsers, roleFilter, statusFilter, dateRangeFilter]);
+  }, [rawUsers, roleFilter, statusFilter, dateFrom, dateTo]);
 
   const pagination = usersQuery.data?.pagination;
   const totalPages = pagination?.totalPages ?? 1;
   const currentPage = pagination?.page ?? 1;
+  const currentLimit = pagination?.limit ?? pageSize;
+  const totalEntries = pagination?.total ?? filteredUsers.length;
+  const startResult = filteredUsers.length ? (currentPage - 1) * currentLimit + 1 : 0;
+  const endResult = (currentPage - 1) * currentLimit + filteredUsers.length;
 
   const handleOpenCreate = () => {
     setEditingUser(null);
@@ -468,12 +488,13 @@ export default function UserManagementPage() {
           </div>
           <select
             value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
+            onChange={(e) => {
+              setRoleFilter(e.target.value);
+              setPage(1);
+            }}
             className="h-10 w-full appearance-none rounded-lg border border-border bg-card pl-9 pr-8 text-xs font-medium text-text-primary outline-none transition-colors hover:bg-secondary-bg focus:border-primary"
           >
-            <option value="all">Role</option>
-            <option value="guard">Guard</option>
-            <option value="supervisor">Supervisor</option>
+            <option value="user">User</option>
             <option value="admin">Admin</option>
           </select>
           <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-500 dark:text-slate-300">
@@ -488,7 +509,10 @@ export default function UserManagementPage() {
           </div>
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
             className="h-10 w-full appearance-none rounded-lg border border-border bg-card pl-9 pr-8 text-xs font-medium text-text-primary outline-none transition-colors hover:bg-secondary-bg focus:border-primary"
           >
             <option value="all">Status</option>
@@ -500,25 +524,27 @@ export default function UserManagementPage() {
           </div>
         </div>
 
-        {/* Date Range Select Dropdown */}
-        <div className="relative min-w-[140px]">
-          <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-600 dark:text-slate-200">
-            <Calendar className="size-4" />
-          </div>
-          <select
-            value={dateRangeFilter}
-            onChange={(e) => setDateRangeFilter(e.target.value)}
-            className="h-10 w-full appearance-none rounded-lg border border-border bg-card pl-9 pr-8 text-xs font-medium text-text-primary outline-none transition-colors hover:bg-secondary-bg focus:border-primary"
-          >
-            <option value="all">Date Range</option>
-            <option value="today">Today</option>
-            <option value="week">Past 7 Days</option>
-            <option value="month">Past 30 Days</option>
-          </select>
-          <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-500 dark:text-slate-300">
-            <span className="text-[10px]">▼</span>
-          </div>
-        </div>
+        {/* Date Range Picker */}
+        <DateRangeFilter
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onDateFromChange={(value) => {
+            setDateFrom(value);
+            setPage(1);
+          }}
+          onDateToChange={(value) => {
+            setDateTo(value);
+            setPage(1);
+          }}
+          onClear={() => {
+            setDateFrom("");
+            setDateTo("");
+            setPage(1);
+          }}
+          open={dateRangeOpen}
+          onOpenChange={setDateRangeOpen}
+          className="relative min-w-[140px]"
+        />
 
         {/* Search Input */}
         <div className="relative min-w-[240px] flex-1 sm:max-w-[340px]">
@@ -535,10 +561,10 @@ export default function UserManagementPage() {
       {/* User Cards Grid */}
       {usersQuery.isLoading ? (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, index) => (
+          {Array.from({ length: Math.min(pageSize, 9) }).map((_, index) => (
             <div
               key={`user-card-skeleton-${index}`}
-              className="rounded-xl border border-border bg-card p-4 shadow-xs"
+              className="rounded-xl border border-card-border-strong bg-card p-4 shadow-card"
             >
               <div className="flex items-center gap-3.5">
                 <Skeleton className="size-14 rounded-full" />
@@ -567,14 +593,13 @@ export default function UserManagementPage() {
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {filteredUsers.map((user) => {
             // Determine active/disabled status
-            const isDisabled =
-              (user as unknown as { isActive?: boolean }).isActive === false ||
-              (user as unknown as { status?: string }).status === "disabled";
+            const isDisabled = isUserDisabled(user);
+            const userRole = (user.role || "user").toLowerCase();
 
             return (
               <div
                 key={user._id}
-                className="group relative flex flex-col justify-between rounded-xl border border-border bg-card shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all hover:shadow-md dark:border-slate-800 dark:bg-[#0c1628]"
+                className="group relative flex flex-col justify-between rounded-xl border border-card-border-strong bg-card shadow-card transition-all hover:shadow-lg"
               >
                 {/* Upper Card Area */}
                 <div className="p-4 sm:p-5">
@@ -595,17 +620,32 @@ export default function UserManagementPage() {
                         </h3>
                         <button
                           type="button"
-                          onClick={() => handleOpenEdit(user)}
+                          onClick={() =>
+                            userRole === "admin" ? router.push("/settings") : handleOpenEdit(user)
+                          }
                           className="text-text-tertiary opacity-0 transition-opacity hover:text-text-primary group-hover:opacity-100"
-                          title="Edit User"
+                          title={userRole === "admin" ? "Manage in Settings" : "Edit User"}
                         >
                           <Pencil className="size-3.5" />
                         </button>
                       </div>
 
-                      <p className="text-xs font-medium text-text-secondary">
-                        User ID: {user.userId || "-"}
-                      </p>
+                      {userRole === "admin" ? (
+                        user.email ? (
+                          <p className="truncate text-xs font-medium text-text-secondary">
+                            {user.email}
+                          </p>
+                        ) : null
+                      ) : (
+                        <>
+                          <p className="text-xs font-medium text-text-secondary capitalize">
+                            Role: {userRole}
+                          </p>
+                          <p className="text-xs font-medium text-text-secondary">
+                            User ID: {user.userId || "-"}
+                          </p>
+                        </>
+                      )}
 
                       <div className="mt-2 flex items-center justify-between gap-2">
                         <span className="truncate text-xs text-text-tertiary">
@@ -629,39 +669,52 @@ export default function UserManagementPage() {
                 </div>
 
                 {/* Card Bottom Actions */}
-                <div className="border-t border-border p-2 dark:border-slate-800/80">
-                  {/* Adaptive button layout matching light and dark screenshots */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDetailsUserId(user._id);
-                        setActivityDate(getCurrentDateInputValue());
-                        setDetailsOpen(true);
-                      }}
-                      className="flex-1 rounded-md py-2 text-center text-xs font-semibold text-blue-600 transition-colors hover:bg-blue-50/60 dark:bg-blue-700 dark:text-white dark:hover:bg-blue-600"
-                    >
-                      View Details
-                    </button>
+                <div className="space-y-2 border-t border-border p-2 dark:border-slate-800/80">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (userRole === "admin") {
+                        router.push("/settings");
+                        return;
+                      }
+                      setDetailsUserId(user._id);
+                      setActivityDate(getCurrentDateInputValue());
+                      setDetailsOpen(true);
+                    }}
+                    className="w-full rounded-md bg-action-info-bg py-2 text-center text-xs font-semibold text-action-info-text shadow-xs transition-colors hover:bg-action-info-bg-hover"
+                  >
+                    View Details
+                  </button>
 
-                    {isDisabled ? (
+                  {userRole === "admin" ? null : (
+                    <div className="flex items-center gap-2">
+                      {isDisabled ? (
+                        <button
+                          type="button"
+                          onClick={() => setToggleStatusUser(user)}
+                          className="flex-1 rounded-md bg-action-success-bg py-2 text-center text-xs font-semibold text-action-success-text shadow-xs transition-colors hover:bg-action-success-bg-hover"
+                        >
+                          Enable
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setToggleStatusUser(user)}
+                          className="flex-1 rounded-md bg-action-neutral-bg py-2 text-center text-xs font-semibold text-action-neutral-text shadow-xs transition-colors hover:bg-action-neutral-bg-hover"
+                        >
+                          Disable
+                        </button>
+                      )}
+
                       <button
                         type="button"
-                        onClick={() => setDeleteUserId(user._id)}
-                        className="flex-1 rounded-md py-2 text-center text-xs font-semibold text-red-600 transition-colors hover:bg-red-50/60 dark:bg-red-800 dark:text-white dark:hover:bg-red-700"
+                        onClick={() => setDeleteTargetUser(user)}
+                        className="flex-1 rounded-md bg-action-danger-bg py-2 text-center text-xs font-semibold text-action-danger-text shadow-xs transition-colors hover:bg-action-danger-bg-hover"
                       >
                         Delete
                       </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setToggleStatusUser(user)}
-                        className="flex-1 rounded-md py-2 text-center text-xs font-semibold text-text-secondary transition-colors hover:bg-secondary-bg hover:text-text-primary dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                      >
-                        Disable
-                      </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -669,8 +722,20 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      {/* Centered Pagination Controls matching screenshots */}
-      <div className="flex justify-center pt-4">
+      {/* Footer & Pagination */}
+      <div className="flex flex-col items-center gap-3 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-xs text-text-tertiary">
+            Showing {startResult} to {endResult} of {totalEntries} entries
+          </p>
+          <PageSizeSelect
+            value={pageSize}
+            onChange={(value) => {
+              setPageSize(value);
+              setPage(1);
+            }}
+          />
+        </div>
         <PaginationControls
           page={page}
           totalPages={totalPages}
@@ -725,27 +790,28 @@ export default function UserManagementPage() {
         user={selectedUser}
       />
 
-      {/* Confirm Delete Dialog */}
+      {/* Confirm Permanent Delete Dialog */}
       <ConfirmDialog
-        open={Boolean(deleteUserId)}
+        open={Boolean(deleteTargetUser)}
         onOpenChange={(value) => {
           if (!value) {
-            setDeleteUserId(null);
+            setDeleteTargetUser(null);
           }
         }}
-        title="Are you sure?"
-        description="You want to delete this user from Dashboard."
-        confirmText="Delete"
+        title="Permanently Delete User?"
+        description={`This will permanently delete ${deleteTargetUser?.name || "this user"} and all of their data. This action cannot be undone.`}
+        confirmText="Permanently Delete"
         confirmVariant="destructive"
+        requireConfirmationText="DELETE"
         onConfirm={() => {
-          if (deleteUserId) {
-            deleteMutation.mutate(deleteUserId);
+          if (deleteTargetUser) {
+            deleteMutation.mutate(deleteTargetUser._id);
           }
         }}
         loading={deleteMutation.isPending}
       />
 
-      {/* Confirm Disable Dialog */}
+      {/* Confirm Disable / Enable Dialog */}
       <ConfirmDialog
         open={Boolean(toggleStatusUser)}
         onOpenChange={(value) => {
@@ -753,18 +819,31 @@ export default function UserManagementPage() {
             setToggleStatusUser(null);
           }
         }}
-        title="Disable User Account?"
-        description={`Are you sure you want to disable ${toggleStatusUser?.name || "this user"}?`}
-        confirmText="Disable Account"
-        confirmVariant="destructive"
+        title={
+          toggleStatusUser && isUserDisabled(toggleStatusUser)
+            ? "Enable User Account?"
+            : "Disable User Account?"
+        }
+        description={
+          toggleStatusUser && isUserDisabled(toggleStatusUser)
+            ? `Are you sure you want to re-activate ${toggleStatusUser?.name || "this user"}? They will be able to log in again.`
+            : `Are you sure you want to disable ${toggleStatusUser?.name || "this user"}? They will not be able to log in while disabled.`
+        }
+        confirmText={
+          toggleStatusUser && isUserDisabled(toggleStatusUser) ? "Enable Account" : "Disable Account"
+        }
+        confirmVariant={
+          toggleStatusUser && isUserDisabled(toggleStatusUser) ? "default" : "destructive"
+        }
         onConfirm={() => {
           if (toggleStatusUser) {
-            toast.info("User status updated");
-            setToggleStatusUser(null);
-            queryClient.invalidateQueries({ queryKey: ["users"] });
+            statusMutation.mutate({
+              id: toggleStatusUser._id,
+              status: isUserDisabled(toggleStatusUser) ? "active" : "disabled",
+            });
           }
         }}
-        loading={false}
+        loading={statusMutation.isPending}
       />
     </section>
   );

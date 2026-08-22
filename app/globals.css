@@ -52,6 +52,8 @@
   --label-text: #334155;
   --skeleton-bg: #e2e8f0;
   --card-border: #e2e8f0;
+  --card-border-strong: #cbd5e1;
+  --card-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 20px rgba(15, 23, 42, 0.08);
   --checkbox-border: #cbd5e1;
   --card-hover-bg: #f8fafc;
   --map-placeholder-start: #e2e8f0;
@@ -68,6 +70,23 @@
   --warning-bg: #fffbeb;
   --warning-text: #d97706;
   --gold-tint: #eff6ff;
+
+  /* Solid action-button colors (View Details / Enable / Disable / Delete on
+     the User Management cards). Light mode uses solid fills so these read at
+     the same visual weight as their dark-mode counterparts below, instead of
+     the washed-out pastel tints a plain `bg-blue-50` etc. gives on a white card. */
+  --action-info-bg: #2563eb;
+  --action-info-bg-hover: #1d4ed8;
+  --action-info-text: #ffffff;
+  --action-neutral-bg: #475569;
+  --action-neutral-bg-hover: #334155;
+  --action-neutral-text: #ffffff;
+  --action-success-bg: #059669;
+  --action-success-bg-hover: #047857;
+  --action-success-text: #ffffff;
+  --action-danger-bg: #dc2626;
+  --action-danger-bg-hover: #b91c1c;
+  --action-danger-text: #ffffff;
 
   /* KPI Card Custom Colors (Light Mode) */
   --kpi-missed-bg: #ef4444;
@@ -129,6 +148,8 @@
   --label-text: #94a3b8;
   --skeleton-bg: #1e293b;
   --card-border: #1e293b;
+  --card-border-strong: #1e293b;
+  --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
   --checkbox-border: #334155;
   --card-hover-bg: #101c31;
   --map-placeholder-start: #0c1628;
@@ -145,6 +166,21 @@
   --warning-bg: #451a03;
   --warning-text: #fbbf24;
   --gold-tint: #111c33;
+
+  /* Solid action-button colors — unchanged from the values already in use,
+     just promoted to tokens so light mode (above) can match their weight. */
+  --action-info-bg: #1d4ed8;
+  --action-info-bg-hover: #2563eb;
+  --action-info-text: #ffffff;
+  --action-neutral-bg: #1e293b;
+  --action-neutral-bg-hover: #334155;
+  --action-neutral-text: #cbd5e1;
+  --action-success-bg: #047857;
+  --action-success-bg-hover: #059669;
+  --action-success-text: #ffffff;
+  --action-danger-bg: #991b1b;
+  --action-danger-bg-hover: #b91c1c;
+  --action-danger-text: #ffffff;
 
   /* KPI Card Custom Colors (Dark Mode) */
   --kpi-missed-bg: #b91c1c;
@@ -201,6 +237,20 @@
   --color-label-text: var(--label-text);
   --color-skeleton-bg: var(--skeleton-bg);
   --color-card-border: var(--card-border);
+  --color-card-border-strong: var(--card-border-strong);
+  --shadow-card: var(--card-shadow);
+  --color-action-info-bg: var(--action-info-bg);
+  --color-action-info-bg-hover: var(--action-info-bg-hover);
+  --color-action-info-text: var(--action-info-text);
+  --color-action-neutral-bg: var(--action-neutral-bg);
+  --color-action-neutral-bg-hover: var(--action-neutral-bg-hover);
+  --color-action-neutral-text: var(--action-neutral-text);
+  --color-action-success-bg: var(--action-success-bg);
+  --color-action-success-bg-hover: var(--action-success-bg-hover);
+  --color-action-success-text: var(--action-success-text);
+  --color-action-danger-bg: var(--action-danger-bg);
+  --color-action-danger-bg-hover: var(--action-danger-bg-hover);
+  --color-action-danger-text: var(--action-danger-text);
   --color-checkbox-border: var(--checkbox-border);
   --color-card-hover-bg: var(--card-hover-bg);
   --color-map-placeholder-start: var(--map-placeholder-start);
@@ -271,8 +321,13 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
 }
 
+/*
+ * `.dark` already sets `color-scheme: dark` on :root (see above), so Chromium
+ * renders this indicator as a light icon automatically. Inverting it here on
+ * top of that would flip it back to a dark icon, making it invisible against
+ * the dark background — so dark mode only needs the opacity bump.
+ */
 .dark input[type="date"]::-webkit-calendar-picker-indicator,
 .dark input[type="time"]::-webkit-calendar-picker-indicator {
-  filter: invert(1) brightness(1.2);
   opacity: 0.9;
 }

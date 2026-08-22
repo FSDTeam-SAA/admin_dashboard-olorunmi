@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock, Loader2, MapPin, TriangleAlert, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -25,6 +25,9 @@ import {
 // unacknowledged emergency must come back.
 const SNOOZE_DURATION = 2 * 60 * 1000;
 
+// How long the alert tone plays before fading out on its own, in seconds.
+const ALERT_SOUND_DURATION = 20;
+
 /**
  * Watches for unacknowledged SOS alerts and interrupts the admin with a dialog.
  *
@@ -35,6 +38,114 @@ export function SosAlertWatcher() {
   const queryClient = useQueryClient();
   const [snoozedIds, setSnoozedIds] = useState<Record<string, boolean>>({});
   const snoozeTimersRef = useRef<number[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  // The one tone currently sounding. Every stop path goes through this single
+  // ref, and `token` identifies which play owns it, so a previous oscillator
+  // finishing can never clear the handle belonging to a newer one.
+  const activeSoundRef = useRef<{
+    token: number;
+    oscillator: OscillatorNode;
+    gain: GainNode;
+  } | null>(null);
+  const playTokenRef = useRef(0);
+  // Guard ids already accounted for by a play/replay, so re-renders and
+  // already-listed guards don't retrigger the tone — only a genuinely new id.
+  const seenAlertIdsRef = useRef<Set<string>>(new Set());
+
+  // Only one instance of the tone should ever be audible at once, so any
+  // in-progress play is torn down before a new one starts.
+  const stopAlertSound = useCallback(() => {
+    const active = activeSoundRef.current;
+    if (!active) {
+      return;
+    }
+
+    activeSoundRef.current = null;
+
+    try {
+      // Detach before stopping: a stale `onended` firing after a newer play
+      // has started is exactly what used to orphan the newer oscillator.
+      active.oscillator.onended = null;
+      active.oscillator.stop();
+    } catch {
+      // Already stopped/ended — nothing to do.
+    }
+
+    try {
+      active.oscillator.disconnect();
+      active.gain.disconnect();
+    } catch {
+      // Already disconnected.
+    }
+  }, []);
+
+  // A short two-tone siren synthesized with the Web Audio API — avoids
+  // depending on a licensed sound asset, and gives precise start/stop control
+  // so it can be cut off the instant an alert is acknowledged.
+  const playAlertSound = useCallback(() => {
+    stopAlertSound();
+
+    try {
+      const AudioContextClass =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
+      if (!AudioContextClass) return;
+
+      const ctx = audioContextRef.current ?? new AudioContextClass();
+      audioContextRef.current = ctx;
+
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.type = "square";
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+
+      const now = ctx.currentTime;
+      const toggleInterval = 0.3;
+      const toggleCount = Math.floor(ALERT_SOUND_DURATION / toggleInterval);
+      for (let i = 0; i < toggleCount; i++) {
+        oscillator.frequency.setValueAtTime(
+          i % 2 === 0 ? 880 : 660,
+          now + i * toggleInterval
+        );
+      }
+
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.setValueAtTime(0.15, now + ALERT_SOUND_DURATION - 0.2);
+      gain.gain.linearRampToValueAtTime(0, now + ALERT_SOUND_DURATION);
+
+      const token = playTokenRef.current + 1;
+      playTokenRef.current = token;
+
+      oscillator.onended = () => {
+        // Clear the shared handle only while this play still owns it.
+        if (activeSoundRef.current?.token === token) {
+          activeSoundRef.current = null;
+        }
+
+        try {
+          oscillator.disconnect();
+          gain.disconnect();
+        } catch {
+          // Already disconnected.
+        }
+      };
+
+      activeSoundRef.current = { token, oscillator, gain };
+
+      oscillator.start(now);
+      oscillator.stop(now + ALERT_SOUND_DURATION);
+
+      // Some browsers start contexts suspended until a user gesture; resuming
+      // is safe to call even when already running, and any rejection here
+      // (blocked autoplay) must never surface as an unhandled error.
+      void ctx.resume?.().catch(() => {});
+    } catch {
+      // Web Audio can be unavailable/blocked in some environments — the SOS
+      // dialog itself must keep working regardless.
+    }
+  }, [stopAlertSound]);
 
   useEffect(
     () => () => {
@@ -42,8 +153,15 @@ export function SosAlertWatcher() {
         window.clearTimeout(timerId)
       );
       snoozeTimersRef.current = [];
+
+      // Last-resort safeguard: nothing may outlive this component still making
+      // noise with no reference left to stop it.
+      stopAlertSound();
+      const ctx = audioContextRef.current;
+      audioContextRef.current = null;
+      void ctx?.close?.().catch(() => {});
     },
-    []
+    [stopAlertSound]
   );
 
   const sosQuery = useQuery({
@@ -73,11 +191,38 @@ export function SosAlertWatcher() {
 
   const isOpen = visibleAlerts.length > 0;
 
+  // Play the alert tone whenever a guard id we haven't already seen shows up
+  // in the visible list — the dialog's first open, each 2-minute
+  // re-appearance, and a new guard's SOS landing while the dialog is already
+  // open for someone else's, all look the same: an id this ref hasn't seen
+  // before. A guard already listed being acknowledged away, or another poll
+  // with no new ids, doesn't replay it. Stop entirely once nobody is left.
+  useEffect(() => {
+    const currentIds = new Set(visibleAlerts.map((alert) => alert._id));
+
+    if (currentIds.size === 0) {
+      stopAlertSound();
+    } else {
+      const hasNewAlert = [...currentIds].some(
+        (id) => !seenAlertIdsRef.current.has(id)
+      );
+      if (hasNewAlert) {
+        playAlertSound();
+      }
+    }
+
+    seenAlertIdsRef.current = currentIds;
+  }, [visibleAlerts, playAlertSound, stopAlertSound]);
+
   const handleSnoozeAll = () => {
     const snoozedNow = visibleAlerts.map((alert) => alert._id);
     if (!snoozedNow.length) {
       return;
     }
+
+    // Closing the dialog always silences it, without waiting on the effect
+    // below to observe the emptied list.
+    stopAlertSound();
 
     setSnoozedIds((previous) => {
       const next = { ...previous };
@@ -174,7 +319,15 @@ export function SosAlertWatcher() {
                   variant="destructive"
                   className="mt-3 w-full font-semibold"
                   disabled={isAcknowledging}
-                  onClick={() => acknowledgeMutation.mutate(alert._id)}
+                  onClick={() => {
+                    // Silence as soon as this was the last guard still
+                    // waiting; if others remain unacknowledged the tone must
+                    // keep going for them.
+                    if (visibleAlerts.length <= 1) {
+                      stopAlertSound();
+                    }
+                    acknowledgeMutation.mutate(alert._id);
+                  }}
                 >
                   {isAcknowledging ? (
                     <Loader2 className="size-4 animate-spin" />
