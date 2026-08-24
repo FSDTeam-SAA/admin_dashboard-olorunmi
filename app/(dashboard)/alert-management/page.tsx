@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -13,6 +13,7 @@ import {
   MapPin,
   RotateCcw,
   Search,
+  ShieldCheck,
   Trash2,
   User as UserIcon,
 } from "lucide-react";
@@ -51,7 +52,7 @@ import {
   sendAlert,
 } from "@/lib/api";
 import { QUERY_KEYS } from "@/lib/constants";
-import { formatDateTimeLabel, getUserInitials } from "@/lib/utils";
+import { cn, formatDateTimeLabel, getUserInitials } from "@/lib/utils";
 import type { ChecklistItem } from "@/types/api";
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -60,7 +61,16 @@ const EMPTY_RESOLVED_ALERTS: Record<string, boolean> = {};
 
 type AlertBadgeConfig = {
   label: string;
-  variant: "danger" | "orange" | "booked" | "neutral" | "success" | "warning";
+  variant:
+    | "danger"
+    | "orange"
+    | "booked"
+    | "neutral"
+    | "success"
+    | "warning"
+    | "ok"
+    | "critical"
+    | "recovered";
   icon: typeof AlertTriangle;
 };
 
@@ -101,16 +111,30 @@ const getAlertBadgeConfig = (status: ChecklistItem["status"] | string): AlertBad
         icon: CheckCircle2,
       };
     case "re_checked_in":
+      // Same "OK" family as Booked-In (green, per the mobile app's Activity
+      // History convention) but a distinct shade + icon so the two stay
+      // visually distinguishable on the dashboard.
       return {
         label: "Check-In: OK",
-        variant: "success",
-        icon: CheckCircle2,
+        variant: "ok",
+        icon: ShieldCheck,
       };
     case "checked_in_not_ok":
+      // Same "not OK" family as Missed Check-In (red) but a distinct shade +
+      // icon for the same reason.
       return {
         label: "Check-In: NOT OK",
-        variant: "danger",
-        icon: AlertTriangle,
+        variant: "critical",
+        icon: AlertCircle,
+      };
+    case "back_inside_radius":
+      // Mobile app's Activity History groups "Back to location" with the
+      // green/success family too; this uses its own shade to stay
+      // distinguishable from Booked-In and Check-In: OK.
+      return {
+        label: "Back Inside Radius",
+        variant: "recovered",
+        icon: RotateCcw,
       };
     default:
       return {
@@ -137,6 +161,24 @@ const getAlertTimestamp = (alert: ChecklistItem) => {
 
   return value ? new Date(value).getTime() : 0;
 };
+
+// The 4 original cards get their counts from `alertsQuery`'s `counts` field
+// (server-computed for those 4 statuses only). Rather than touch the backend
+// to add the 3 new statuses there, this reuses the endpoint's existing
+// single-type ("raw") path — already used by the card click-through dialog —
+// which returns an accurate `pagination.total` for any status, under the same
+// "not deduped, today by default, respects Date Range" rules as the other 4.
+// `limit: 1` is enough since only the total is needed here.
+function useAlertTypeTotal(type: string, dateFrom: string, dateTo: string) {
+  const query = useQuery({
+    queryKey: QUERY_KEYS.cardAlerts(type, 1, 1, dateFrom, dateTo),
+    queryFn: () => getAlerts({ page: 1, limit: 1, type, dateFrom, dateTo }),
+    refetchInterval: REALTIME_REFETCH_INTERVAL,
+    refetchIntervalInBackground: true,
+  });
+
+  return query.data?.pagination.total ?? 0;
+}
 
 const getDeviceDate = () => {
   const now = new Date();
@@ -325,6 +367,74 @@ export default function AlertManagementPage() {
     outOfLocation: 0,
     bookedOff: 0,
   };
+
+  // Same total-event-count semantics as `kpiStats` above, fetched separately
+  // per type (see `useAlertTypeTotal`).
+  const checkInOkTotal = useAlertTypeTotal("re_checked_in", dateFrom, dateTo);
+  const checkInNotOkTotal = useAlertTypeTotal("checked_in_not_ok", dateFrom, dateTo);
+  const backInsideRadiusTotal = useAlertTypeTotal("back_inside_radius", dateFrom, dateTo);
+
+  // Booked-In first, Booked-Off last — the original 4 keep their relative
+  // order, with the 3 newer types inserted before Booked-Off.
+  const summaryCards: {
+    type: string;
+    label: string;
+    count: number;
+    icon: ReactNode;
+    colorClassName: string;
+  }[] = [
+    {
+      type: "checked_in",
+      label: "Booked-In",
+      count: kpiStats.bookedIn,
+      icon: <CheckCircle2 className="size-4" />,
+      colorClassName: "bg-emerald-600 dark:bg-emerald-800",
+    },
+    {
+      type: "checked_in_missed",
+      label: "Missed Check-In",
+      count: kpiStats.missedCheckIn,
+      icon: <span className="text-sm font-black">!</span>,
+      colorClassName: "bg-red-600 dark:bg-red-800",
+    },
+    {
+      type: "user_outside_radius",
+      label: "Out of Location",
+      count: kpiStats.outOfLocation,
+      icon: <MapPin className="size-4" />,
+      colorClassName: "bg-orange-500 dark:bg-orange-700",
+    },
+    {
+      type: "re_checked_in",
+      label: "Check-In: OK",
+      count: checkInOkTotal,
+      icon: <ShieldCheck className="size-4" />,
+      colorClassName: "bg-green-600 dark:bg-green-800",
+    },
+    {
+      type: "checked_in_not_ok",
+      label: "Check-In: NOT OK",
+      count: checkInNotOkTotal,
+      // Amber, not the earlier teal/rose-adjacent tone — kept clearly
+      // distinct from Out of Location's orange-500.
+      icon: <AlertCircle className="size-4" />,
+      colorClassName: "bg-amber-600 dark:bg-amber-800",
+    },
+    {
+      type: "back_inside_radius",
+      label: "Back Inside Radius",
+      count: backInsideRadiusTotal,
+      icon: <RotateCcw className="size-4" />,
+      colorClassName: "bg-teal-600 dark:bg-teal-800",
+    },
+    {
+      type: "checked_out",
+      label: "Booked-Off",
+      count: kpiStats.bookedOff,
+      icon: <Calendar className="size-4" />,
+      colorClassName: "bg-blue-600 dark:bg-blue-700",
+    },
+  ];
 
   // Raw (undeduped) alerts backing the card dialog — see `cardAlertsQuery`.
   const cardAlerts = cardAlertsQuery.data?.alerts ?? [];
@@ -528,103 +638,38 @@ export default function AlertManagementPage() {
         </div>
       </div>
 
-      {/* 4 Top KPI Summary Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Card 1: Booked-In (Green) */}
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => openCardDialog("checked_in")}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") openCardDialog("checked_in");
-          }}
-          className="relative cursor-pointer overflow-hidden rounded-xl bg-emerald-600 p-4 text-left text-white shadow-xs transition-transform hover:-translate-y-0.5 dark:bg-emerald-800"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-xs">
-              <CheckCircle2 className="size-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-white/90">Booked-In</p>
-              <div className="flex items-baseline justify-between">
-                <span className="text-2xl font-extrabold tracking-tight">{kpiStats.bookedIn}</span>
-                <span className="text-xs font-medium text-white/80">&rsaquo;</span>
+      {/* 7 Top KPI Summary Cards — Booked-In first, Booked-Off last, the
+          original 4 keeping their relative order with the 3 newer types
+          inserted before Booked-Off. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7">
+        {summaryCards.map((card) => (
+          <div
+            key={card.type}
+            role="button"
+            tabIndex={0}
+            onClick={() => openCardDialog(card.type)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") openCardDialog(card.type);
+            }}
+            className={cn(
+              "relative cursor-pointer overflow-hidden rounded-xl p-3 text-left text-white shadow-xs transition-transform hover:-translate-y-0.5",
+              card.colorClassName
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-xs">
+                {card.icon}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[11px] font-bold text-white">{card.label}</p>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xl font-black tracking-tight">{card.count}</span>
+                  <span className="text-sm font-bold text-white/90">&rsaquo;</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Card 2: Missed Check-In (Red) */}
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => openCardDialog("checked_in_missed")}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") openCardDialog("checked_in_missed");
-          }}
-          className="relative cursor-pointer overflow-hidden rounded-xl bg-red-600 p-4 text-left text-white shadow-xs transition-transform hover:-translate-y-0.5 dark:bg-red-800"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-xs">
-              <span className="text-base font-black">!</span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-white/90">Missed Check-In</p>
-              <div className="flex items-baseline justify-between">
-                <span className="text-2xl font-extrabold tracking-tight">{kpiStats.missedCheckIn}</span>
-                <span className="text-xs font-medium text-white/80">&rsaquo;</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 3: Out of Location (Orange) */}
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => openCardDialog("user_outside_radius")}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") openCardDialog("user_outside_radius");
-          }}
-          className="relative cursor-pointer overflow-hidden rounded-xl bg-orange-500 p-4 text-left text-white shadow-xs transition-transform hover:-translate-y-0.5 dark:bg-orange-700"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-xs">
-              <MapPin className="size-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-white/90">Out of Location</p>
-              <div className="flex items-baseline justify-between">
-                <span className="text-2xl font-extrabold tracking-tight">{kpiStats.outOfLocation}</span>
-                <span className="text-xs font-medium text-white/80">&rsaquo;</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 4: Booked-Off (Blue) */}
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => openCardDialog("checked_out")}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") openCardDialog("checked_out");
-          }}
-          className="relative cursor-pointer overflow-hidden rounded-xl bg-blue-600 p-4 text-left text-white shadow-xs transition-transform hover:-translate-y-0.5 dark:bg-blue-700"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-xs">
-              <Calendar className="size-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-white/90">Booked-Off</p>
-              <div className="flex items-baseline justify-between">
-                <span className="text-2xl font-extrabold tracking-tight">{kpiStats.bookedOff}</span>
-                <span className="text-xs font-medium text-white/80">&rsaquo;</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        ))}
       </div>
 
       {/* Alert Table */}
