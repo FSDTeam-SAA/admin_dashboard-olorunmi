@@ -210,19 +210,15 @@ export type ReportsListResponse = {
   pagination: PaginationMeta;
 };
 
-export type SiteLocation = {
+/**
+ * A patrol location. These are a single flat list — there is no Site grouping;
+ * every entry here is directly selectable in a user's day schedule.
+ */
+export type LocationItem = {
   _id: string;
   name: string;
   latitude: number;
   longitude: number;
-  createdAt?: string;
-  updatedAt?: string;
-};
-
-export type SiteItem = {
-  _id: string;
-  name: string;
-  locations: SiteLocation[];
   createdAt?: string;
   updatedAt?: string;
 };

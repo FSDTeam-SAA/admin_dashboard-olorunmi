@@ -129,7 +129,6 @@ const ALERT_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "checked_out", label: "Booked-Off" },
   { value: "user_outside_radius", label: "Out of Location" },
   { value: "back_inside_radius", label: "Back Inside Radius" },
-  { value: "testing_alert", label: "Testing Alert" },
 ];
 
 // Most recent activity moment on an alert, used to pick a user's latest alert.
@@ -508,45 +507,6 @@ export default function AlertManagementPage() {
 
         {/* Status Segmented Tabs & Search Button */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-1 text-xs font-medium text-text-secondary">
-            <span className="font-semibold text-text-primary">Status :</span>
-            <button
-              type="button"
-              onClick={() => setStatusTab("all")}
-              className={`rounded px-2 py-1 transition-colors ${
-                statusTab === "all"
-                  ? "font-bold text-blue-600 dark:text-blue-400"
-                  : "text-text-tertiary hover:text-text-primary"
-              }`}
-            >
-              All
-            </button>
-            <span className="text-border">|</span>
-            <button
-              type="button"
-              onClick={() => setStatusTab("unresolved")}
-              className={`rounded px-2 py-1 transition-colors ${
-                statusTab === "unresolved"
-                  ? "font-bold text-blue-600 dark:text-blue-400"
-                  : "text-text-tertiary hover:text-text-primary"
-              }`}
-            >
-              Unresolved
-            </button>
-            <span className="text-border">|</span>
-            <button
-              type="button"
-              onClick={() => setStatusTab("resolved")}
-              className={`rounded px-2 py-1 transition-colors ${
-                statusTab === "resolved"
-                  ? "font-bold text-blue-600 dark:text-blue-400"
-                  : "text-text-tertiary hover:text-text-primary"
-              }`}
-            >
-              Resolved
-            </button>
-          </div>
-
           <Button
             type="button"
             className="h-9 rounded-lg bg-teal-600 px-5 text-xs font-semibold text-white shadow-xs hover:bg-teal-700 active:bg-teal-800"

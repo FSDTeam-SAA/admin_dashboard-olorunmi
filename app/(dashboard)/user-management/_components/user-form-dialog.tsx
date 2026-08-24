@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, type ComponentProps } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Building2,
   CalendarDays,
   ChevronDown,
   Clock,
@@ -23,10 +22,10 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { getSites } from "@/lib/api";
+import { getLocations } from "@/lib/api";
 import { QUERY_KEYS } from "@/lib/constants";
 import { cn, getUserInitials } from "@/lib/utils";
-import type { SiteItem, SiteLocation, UserListItem, WeeklyLocations } from "@/types/api";
+import type { LocationItem, UserListItem, WeeklyLocations } from "@/types/api";
 
 import { OpenStreetMapPicker } from "@/components/dashboard/open-street-map-picker";
 
@@ -56,7 +55,7 @@ type WeeklyLocationFormRow = {
 };
 
 // Coordinates are stored as strings in the form; compare them numerically so a
-// saved "23.810300" still matches a site location's 23.8103.
+// saved "23.810300" still matches a location's 23.8103.
 const coordinatesMatch = (value: string, target: number) => {
   const parsed = Number(value);
 
@@ -64,22 +63,30 @@ const coordinatesMatch = (value: string, target: number) => {
 };
 
 /**
+ * The location name a saved row points at. Rows saved under the old
+ * Site -> Location structure may only carry `site`, so that is the fallback:
+ * after flattening, a site name and a location name are the same kind of thing.
+ */
+const getRowLocationName = (row: WeeklyLocationFormRow) =>
+  row.locationName || row.site;
+
+/**
  * Resolves which Location Management record a day row is currently driven by.
  * Falls back to matching saved coordinates so users saved before locations were
  * tracked by name still show the right selection. Returns null when the row is
- * manual, or when its site/location no longer exists in Location Management.
+ * manual, or when its location no longer exists in Location Management.
  */
 const resolveSelectedLocation = (
   row: WeeklyLocationFormRow,
-  site: SiteItem | undefined
-): SiteLocation | null => {
-  if (!site) return null;
+  locations: LocationItem[]
+): LocationItem | null => {
+  const rowLocationName = getRowLocationName(row);
 
-  if (row.locationName) {
-    return site.locations.find((location) => location.name === row.locationName) ?? null;
+  if (rowLocationName) {
+    return locations.find((location) => location.name === rowLocationName) ?? null;
   }
 
-  const coordinateMatches = site.locations.filter(
+  const coordinateMatches = locations.filter(
     (location) =>
       coordinatesMatch(row.latitude, location.latitude) &&
       coordinatesMatch(row.longitude, location.longitude)
@@ -126,17 +133,13 @@ export function UserFormDialog({
   const [defaultRadius, setDefaultRadius] = useState(String(initialValues?.defaultRadius ?? 100));
   const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
 
-  const sitesQuery = useQuery({
-    queryKey: QUERY_KEYS.sites(),
-    queryFn: () => getSites(),
+  const locationsQuery = useQuery({
+    queryKey: QUERY_KEYS.locations(),
+    queryFn: () => getLocations(),
     enabled: open,
   });
 
-  const sites = useMemo(() => sitesQuery.data ?? [], [sitesQuery.data]);
-  const sitesByName = useMemo(
-    () => new Map(sites.map((site) => [site.name, site])),
-    [sites]
-  );
+  const locations = useMemo(() => locationsQuery.data ?? [], [locationsQuery.data]);
 
   const previewUrl = useMemo(() => {
     if (!profilePhoto) {
@@ -265,8 +268,7 @@ export function UserFormDialog({
 
           <WeeklyLocationsInput
             rows={weeklyLocationRows}
-            sites={sites}
-            sitesByName={sitesByName}
+            locations={locations}
             activeIndex={activeLocationIndex}
             onActiveIndexChange={setActiveLocationIndex}
             onRowsChange={setWeeklyLocationRows}
@@ -288,12 +290,9 @@ export function UserFormDialog({
                 return;
               }
 
-              if (
-                activeLocation &&
-                resolveSelectedLocation(activeLocation, sitesByName.get(activeLocation.site))
-              ) {
+              if (activeLocation && resolveSelectedLocation(activeLocation, locations)) {
                 toast.error(
-                  "Coordinates come from the selected site location. Clear the location to set them manually."
+                  "Coordinates come from the selected location. Clear the location to set them manually."
                 );
                 return;
               }
@@ -464,15 +463,13 @@ function ProfilePhotoPicker({
 
 function WeeklyLocationsInput({
   rows,
-  sites,
-  sitesByName,
+  locations,
   activeIndex,
   onActiveIndexChange,
   onRowsChange,
 }: {
   rows: WeeklyLocationFormRow[];
-  sites: SiteItem[];
-  sitesByName: Map<string, SiteItem>;
+  locations: LocationItem[];
   activeIndex: number;
   onActiveIndexChange: (index: number) => void;
   onRowsChange: (rows: WeeklyLocationFormRow[]) => void;
@@ -481,13 +478,7 @@ function WeeklyLocationsInput({
     rowIndex: number,
     field: keyof Pick<
       WeeklyLocationFormRow,
-      | "site"
-      | "locationName"
-      | "onShift"
-      | "offShift"
-      | "latitude"
-      | "longitude"
-      | "isWeekend"
+      "onShift" | "offShift" | "latitude" | "longitude" | "isWeekend"
     >,
     value: string | boolean
   ) => {
@@ -504,32 +495,21 @@ function WeeklyLocationsInput({
     );
   };
 
-  // Picking a site auto-fills coordinates when there is only one location to
-  // choose from; otherwise the row waits for an explicit location choice.
-  const handleSiteChange = (rowIndex: number, siteName: string) => {
-    const nextSite = sitesByName.get(siteName);
-    const onlyLocation =
-      nextSite && nextSite.locations.length === 1 ? nextSite.locations[0] : null;
-
-    patchRow(rowIndex, {
-      site: siteName,
-      locationName: onlyLocation?.name ?? "",
-      ...(onlyLocation
-        ? {
-            latitude: String(onlyLocation.latitude),
-            longitude: String(onlyLocation.longitude),
-          }
-        : {}),
-    });
-  };
-
+  // Picking a location fills the row's coordinate snapshot. `site` is kept in
+  // step with the name so the user list's Site column stays populated now that
+  // a location is the only level there is.
   const handleLocationChange = (rowIndex: number, locationName: string) => {
-    const row = rows[rowIndex];
-    const location = sitesByName
-      .get(row.site)
-      ?.locations.find((item) => item.name === locationName);
+    if (!locationName) {
+      // Clearing the selection unlocks the coordinates for manual entry; the
+      // values already on the row are left alone.
+      patchRow(rowIndex, { site: "", locationName: "" });
+      return;
+    }
+
+    const location = locations.find((item) => item.name === locationName);
 
     patchRow(rowIndex, {
+      site: locationName,
       locationName,
       ...(location
         ? {
@@ -552,19 +532,20 @@ function WeeklyLocationsInput({
           const isActive = index === activeIndex;
           const isWeekend = row.isWeekend;
 
-          const selectedSite = sitesByName.get(row.site);
-          const selectedLocation = resolveSelectedLocation(row, selectedSite);
-          // A site saved before it was renamed/removed in Location Management is
-          // still offered so the row keeps its value instead of silently resetting.
-          const hasMissingSite = Boolean(row.site) && !selectedSite;
-          const showLocationSelect = (selectedSite?.locations.length ?? 0) > 1;
+          const selectedLocation = resolveSelectedLocation(row, locations);
+          const rowLocationName = getRowLocationName(row);
+          // A location saved before it was renamed/removed in Location Management
+          // is still offered so the row keeps its value instead of silently
+          // resetting — its saved coordinates stay exactly as they were.
+          const hasMissingLocation = Boolean(rowLocationName) && !selectedLocation;
+          const selectValue = selectedLocation?.name ?? rowLocationName;
           const coordinatesLocked = Boolean(selectedLocation);
 
           return (
             <div
               key={row.key}
               className={cn(
-                "grid gap-2 rounded-lg border p-2 md:grid-cols-[minmax(120px,0.7fr)_minmax(260px,1.6fr)_minmax(120px,0.75fr)_minmax(120px,0.75fr)_minmax(110px,0.7fr)_minmax(110px,0.7fr)] md:items-start",
+                "grid gap-2 rounded-lg border p-2 md:grid-cols-[minmax(120px,0.7fr)_minmax(260px,1.6fr)_minmax(120px,0.75fr)_minmax(120px,0.75fr)_minmax(110px,0.7fr)_minmax(110px,0.7fr)] md:items-center",
                 "cursor-pointer transition-colors",
                 isActive
                   ? isWeekend
@@ -584,42 +565,25 @@ function WeeklyLocationsInput({
                 <span>{WEEK_DAYS[index].label}</span>
               </button>
 
-              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-                <div className="space-y-2">
-                  <IconSelect
-                    icon={Building2}
-                    aria-label={`${WEEK_DAYS[index].label} site`}
-                    value={isWeekend ? "" : row.site}
-                    onChange={(event) => handleSiteChange(index, event.target.value)}
-                    disabled={isWeekend}
-                  >
-                    <option value="">{isWeekend ? "-" : "Select Site"}</option>
-                    {hasMissingSite ? (
-                      <option value={row.site}>{row.site} (unavailable)</option>
-                    ) : null}
-                    {sites.map((site) => (
-                      <option key={site._id} value={site.name}>
-                        {site.name}
-                      </option>
-                    ))}
-                  </IconSelect>
-
-                  {!isWeekend && showLocationSelect ? (
-                    <IconSelect
-                      icon={MapPin}
-                      aria-label={`${WEEK_DAYS[index].label} location`}
-                      value={row.locationName}
-                      onChange={(event) => handleLocationChange(index, event.target.value)}
-                    >
-                      <option value="">Select Location</option>
-                      {selectedSite?.locations.map((location) => (
-                        <option key={location._id} value={location.name}>
-                          {location.name}
-                        </option>
-                      ))}
-                    </IconSelect>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                <IconSelect
+                  icon={MapPin}
+                  aria-label={`${WEEK_DAYS[index].label} location`}
+                  value={isWeekend ? "" : selectValue}
+                  onChange={(event) => handleLocationChange(index, event.target.value)}
+                  disabled={isWeekend}
+                >
+                  <option value="">{isWeekend ? "-" : "Select Location"}</option>
+                  {hasMissingLocation ? (
+                    <option value={rowLocationName}>{rowLocationName} (unavailable)</option>
                   ) : null}
-                </div>
+                  {locations.map((location) => (
+                    <option key={location._id} value={location.name}>
+                      {location.name}
+                    </option>
+                  ))}
+                </IconSelect>
+
                 <label className="flex h-10 items-center gap-2 rounded-lg border border-border bg-secondary-bg/60 px-3 text-xs font-medium text-text-secondary">
                   <Checkbox
                     checked={isWeekend}

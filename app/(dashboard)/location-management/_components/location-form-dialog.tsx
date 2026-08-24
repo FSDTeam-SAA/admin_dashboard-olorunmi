@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { SiteLocation } from "@/types/api";
+import type { LocationItem } from "@/types/api";
 
 const DEFAULT_LATITUDE = 23.8103;
 const DEFAULT_LONGITUDE = 90.4125;
@@ -16,8 +16,7 @@ const DEFAULT_LONGITUDE = 90.4125;
 type LocationFormDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  siteName: string;
-  initialValues: SiteLocation | null;
+  initialValues: LocationItem | null;
   onSubmit: (payload: { name: string; latitude: number; longitude: number }) => void;
   loading: boolean;
 };
@@ -25,7 +24,6 @@ type LocationFormDialogProps = {
 export function LocationFormDialog({
   open,
   onOpenChange,
-  siteName,
   initialValues,
   onSubmit,
   loading,
@@ -60,9 +58,11 @@ export function LocationFormDialog({
       <DialogContent className="max-h-[92vh] max-w-[620px] overflow-y-auto rounded-2xl border-border bg-card">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold text-text-primary">
-            {isEditing ? "Edit Location" : "Add Location"}
+            {isEditing ? "Edit Location" : "Add New Location"}
           </DialogTitle>
-          <p className="text-xs text-text-tertiary">{siteName}</p>
+          <p className="text-xs text-text-tertiary">
+            Name this location and set the coordinates users check in against.
+          </p>
         </DialogHeader>
 
         <form
