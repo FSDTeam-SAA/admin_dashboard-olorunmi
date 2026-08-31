@@ -569,7 +569,7 @@ export default function UserManagementPage() {
           {Array.from({ length: Math.min(pageSize, 9) }).map((_, index) => (
             <div
               key={`user-card-skeleton-${index}`}
-              className="rounded-xl border border-card-border-strong bg-card p-4 shadow-card"
+              className="rounded-xl border-[1.5px] border-card-border-strong bg-card p-4 shadow-card dark:border"
             >
               <div className="flex items-center gap-3.5">
                 <Skeleton className="size-14 rounded-full" />
@@ -604,7 +604,7 @@ export default function UserManagementPage() {
             return (
               <div
                 key={user._id}
-                className="group relative flex flex-col justify-between rounded-xl border border-card-border-strong bg-card shadow-card transition-all hover:shadow-lg"
+                className="group relative flex flex-col justify-between rounded-xl border-[1.5px] border-card-border-strong bg-card shadow-card transition-all hover:shadow-lg dark:border"
               >
                 {/* Upper Card Area */}
                 <div className="p-4 sm:p-5">
