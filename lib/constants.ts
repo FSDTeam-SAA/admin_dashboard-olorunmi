@@ -18,6 +18,14 @@ export const QUERY_KEYS = {
   ) => ["alerts", page, limit, search, dateFrom, dateTo, alertType, user] as const,
   cardAlerts: (type: string | null, page: number, limit: number, dateFrom = "", dateTo = "") =>
     ["card-alerts", type, page, limit, dateFrom, dateTo] as const,
+  cardAlertsUserExpand: (
+    type: string | null,
+    userId: string | null,
+    page: number,
+    limit: number,
+    dateFrom = "",
+    dateTo = ""
+  ) => ["card-alerts-user-expand", type, userId, page, limit, dateFrom, dateTo] as const,
   sosAlerts: (status: string, user = "all", page = 1) =>
     ["sos-alerts", status, user, page] as const,
   userChecklists: (userId?: string, date?: string) =>
