@@ -246,6 +246,12 @@ export const getAlerts = async (params: {
   // that type — used by the summary-card dialogs so their row count matches
   // the card's own total.
   type?: string;
+  // With `type`, collapse to one row per user (their latest event of that
+  // type) plus `eventCount` — the card dialog's default deduplicated view.
+  groupByUser?: boolean;
+  // With `type`, scope the raw (undeduped) event list to one user — the card
+  // dialog's per-user expand.
+  expandUser?: string;
 }) => {
   const response = await apiClient.get<ApiResponse<AlertsListResponse>>(
     "/checklist/admin/alerts",

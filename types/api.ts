@@ -92,6 +92,12 @@ export type ChecklistItem = {
   };
   option: string;
   workDate: string;
+  // The guard's own timezone at the moment of the event, plus the wall-clock
+  // stamps derived from it server-side. `workDate` is expressed in this zone,
+  // so it is also the zone every displayed timestamp has to be rendered in.
+  timezone?: string;
+  localDateTime?: string;
+  localTime?: string;
   checkInAt: string;
   checkOutAt?: string;
   checkOutType?: "manual" | "auto";
@@ -113,6 +119,9 @@ export type ChecklistItem = {
     latitude?: number;
     longitude?: number;
   };
+  // Present only when the alerts endpoint is queried with `groupByUser` —
+  // total events of this alert type this user has in the queried scope.
+  eventCount?: number;
 };
 
 export type ReportItem = {

@@ -26,6 +26,42 @@ export function formatDateTimeLabel(dateValue: string | Date) {
   }).format(date);
 }
 
+/**
+ * Same output as `formatDateTimeLabel`, but rendered as wall-clock time in an
+ * explicit IANA timezone instead of the viewer's browser timezone.
+ *
+ * Attendance data is keyed on `workDate` — the guard's own local calendar day —
+ * so any timestamp shown next to a `workDate`-filtered list has to be read in
+ * that same zone. Formatting in the admin's browser zone instead shifts evening
+ * events onto the following (or preceding) day and makes a correctly filtered
+ * list look wrong.
+ *
+ * An absent or unrecognised `timeZone` falls back to browser-local formatting
+ * rather than throwing.
+ */
+export function formatDateTimeLabelInZone(
+  dateValue: string | Date,
+  timeZone?: string | null
+) {
+  if (!timeZone) {
+    return formatDateTimeLabel(dateValue);
+  }
+
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date(dateValue));
+  } catch {
+    return formatDateTimeLabel(dateValue);
+  }
+}
+
 // Shared 24-hour time formatter; reuse this for every time-only display.
 export function formatTimeLabel(dateValue: string | Date) {
   const date = new Date(dateValue);

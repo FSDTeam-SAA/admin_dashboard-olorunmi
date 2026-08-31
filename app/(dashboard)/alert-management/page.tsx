@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -8,6 +8,7 @@ import {
   Calendar,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   Eye,
   Filter,
   MapPin,
@@ -52,7 +53,7 @@ import {
   sendAlert,
 } from "@/lib/api";
 import { QUERY_KEYS } from "@/lib/constants";
-import { cn, formatDateTimeLabel, getUserInitials } from "@/lib/utils";
+import { cn, formatDateTimeLabelInZone, getUserInitials } from "@/lib/utils";
 import type { ChecklistItem } from "@/types/api";
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -162,6 +163,19 @@ const getAlertTimestamp = (alert: ChecklistItem) => {
   return value ? new Date(value).getTime() : 0;
 };
 
+// The Date Range filter matches on `workDate`, which the backend records as the
+// guard's own local calendar day. Rendering the event instant in the admin's
+// browser timezone instead pushed evening events onto the next day (an
+// America/Edmonton 20:27 check-in read as "August 13, 2026 at 08:27" for an
+// Asia/Dhaka admin), making a correctly filtered list look like it was leaking
+// extra days. Format in the guard's zone so the row's date always agrees with
+// the `workDate` it was matched on.
+const formatAlertDateTime = (alert: ChecklistItem) => {
+  const instant = alert.checkOutAt || alert.checkInAt;
+
+  return instant ? formatDateTimeLabelInZone(instant, alert.timezone) : "-";
+};
+
 // The 4 original cards get their counts from `alertsQuery`'s `counts` field
 // (server-computed for those 4 statuses only). Rather than touch the backend
 // to add the 3 new statuses there, this reuses the endpoint's existing
@@ -206,6 +220,12 @@ export default function AlertManagementPage() {
 
   const [cardPage, setCardPage] = useState(1);
   const [cardPageSize, setCardPageSize] = useState(DEFAULT_PAGE_SIZE);
+
+  // Which user's row is expanded to their individual events, within the
+  // currently open card dialog — one at a time (accordion-style).
+  const [expandedCardUserId, setExpandedCardUserId] = useState<string | null>(null);
+  const [expandedUserPage, setExpandedUserPage] = useState(1);
+  const [expandedUserPageSize, setExpandedUserPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   // Resolve was removed and never persisted server-side, so nothing can set
   // this anymore — kept as an always-empty map so the Status tab below still
@@ -252,9 +272,10 @@ export default function AlertManagementPage() {
     refetchIntervalInBackground: true,
   });
 
-  // Card dialog: raw (undeduped) event list for one alert type, scoped to the
-  // same date range as the KPI card count so the dialog's rows always total
-  // to the number shown on the card.
+  // Card dialog: one row per user (their latest event of this type) plus how
+  // many total events of this type they have, scoped to the same date range
+  // as the KPI card count so the per-user counts always sum to the card's
+  // own total.
   const cardAlertsQuery = useQuery({
     queryKey: QUERY_KEYS.cardAlerts(cardAlertType, cardPage, cardPageSize, dateFrom, dateTo),
     queryFn: () =>
@@ -262,10 +283,34 @@ export default function AlertManagementPage() {
         page: cardPage,
         limit: cardPageSize,
         type: cardAlertType as string,
+        groupByUser: true,
         dateFrom,
         dateTo,
       }),
     enabled: Boolean(cardAlertType),
+  });
+
+  // Expanded row: that one user's individual events of this type, within the
+  // same date scope.
+  const cardUserEventsQuery = useQuery({
+    queryKey: QUERY_KEYS.cardAlertsUserExpand(
+      cardAlertType,
+      expandedCardUserId,
+      expandedUserPage,
+      expandedUserPageSize,
+      dateFrom,
+      dateTo
+    ),
+    queryFn: () =>
+      getAlerts({
+        page: expandedUserPage,
+        limit: expandedUserPageSize,
+        type: cardAlertType as string,
+        expandUser: expandedCardUserId as string,
+        dateFrom,
+        dateTo,
+      }),
+    enabled: Boolean(cardAlertType) && Boolean(expandedCardUserId),
   });
 
   const usersQuery = useQuery({
@@ -357,6 +402,13 @@ export default function AlertManagementPage() {
   const openCardDialog = (type: string) => {
     setCardAlertType(type);
     setCardPage(1);
+    setExpandedCardUserId(null);
+    setExpandedUserPage(1);
+  };
+
+  const toggleExpandedCardUser = (userId: string) => {
+    setExpandedCardUserId((current) => (current === userId ? null : userId));
+    setExpandedUserPage(1);
   };
 
   // Total event counts (not deduped per user) for the current date scope —
@@ -436,9 +488,13 @@ export default function AlertManagementPage() {
     },
   ];
 
-  // Raw (undeduped) alerts backing the card dialog — see `cardAlertsQuery`.
+  // One row per user backing the card dialog — see `cardAlertsQuery`.
   const cardAlerts = cardAlertsQuery.data?.alerts ?? [];
   const cardPagination = cardAlertsQuery.data?.pagination;
+
+  // That one expanded user's individual events — see `cardUserEventsQuery`.
+  const cardUserEvents = cardUserEventsQuery.data?.alerts ?? [];
+  const cardUserEventsPagination = cardUserEventsQuery.data?.pagination;
 
   const cardAlertLabel = cardAlertType ? getAlertBadgeConfig(cardAlertType).label : "";
 
@@ -498,11 +554,7 @@ export default function AlertManagementPage() {
 
         {/* Date & Time */}
         <TableCell className="w-[200px] truncate text-xs text-text-secondary">
-          {alert.checkOutAt
-            ? formatDateTimeLabel(alert.checkOutAt)
-            : alert.checkInAt
-              ? formatDateTimeLabel(alert.checkInAt)
-              : "2023-12-15 10:21 AM"}
+          {formatAlertDateTime(alert)}
         </TableCell>
 
         {/* Alert Pill Badge */}
@@ -533,6 +585,142 @@ export default function AlertManagementPage() {
           </div>
         </TableCell>
       </TableRow>
+    );
+  };
+
+  // Card dialog row: one per user, their latest event of this type, plus a
+  // count badge that expands to that user's individual events (see
+  // `cardUserEventsQuery`).
+  const renderCardUserRow = (alert: ChecklistItem) => {
+    const badgeConfig = getAlertBadgeConfig(alert.status);
+    const AlertIcon = badgeConfig.icon;
+    const userId = alert.user?._id ?? alert._id;
+    const isExpanded = expandedCardUserId === userId;
+
+    return (
+      <Fragment key={alert._id}>
+        <TableRow className="transition-colors hover:bg-secondary-bg/50">
+          <TableCell className="w-[200px]">
+            <div className="flex min-w-0 items-center gap-3">
+              <Avatar className="size-9 shrink-0 border border-border">
+                <AvatarImage
+                  src={(alert.user as unknown as { avatar?: { url?: string } })?.avatar?.url ?? ""}
+                  alt={alert.user?.name ?? "User"}
+                />
+                <AvatarFallback className="text-xs font-bold">
+                  {getUserInitials(alert.user?.name)}
+                </AvatarFallback>
+              </Avatar>
+              <span className="truncate text-sm font-semibold text-text-primary">
+                {alert.user?.name || "John Smith"}
+              </span>
+            </div>
+          </TableCell>
+
+          <TableCell className="w-[110px] truncate text-xs font-medium text-text-secondary">
+            {alert.user?.userId || "USR-1034"}
+          </TableCell>
+
+          <TableCell className="w-[190px] truncate text-xs text-text-secondary">
+            {formatAlertDateTime(alert)}
+          </TableCell>
+
+          <TableCell className="w-[210px]">
+            <Badge variant={badgeConfig.variant} className="h-7 w-44 px-3 text-xs font-semibold">
+              <AlertIcon className="size-3.5 shrink-0" />
+              <span className="truncate">{badgeConfig.label}</span>
+            </Badge>
+          </TableCell>
+
+          <TableCell className="w-[110px] text-right">
+            <button
+              type="button"
+              onClick={() => toggleExpandedCardUser(userId)}
+              className="ml-auto flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-text-primary transition-colors hover:bg-secondary-bg"
+              aria-expanded={isExpanded}
+              aria-label={`${alert.eventCount ?? 1} ${badgeConfig.label} events — ${
+                isExpanded ? "collapse" : "expand"
+              }`}
+            >
+              <span>{alert.eventCount ?? 1}</span>
+              <ChevronRight
+                className={cn("size-3.5 transition-transform", isExpanded && "rotate-90")}
+              />
+            </button>
+          </TableCell>
+        </TableRow>
+
+        {isExpanded ? (
+          <TableRow className="bg-secondary-bg/30 hover:bg-secondary-bg/30">
+            <TableCell colSpan={5} className="p-0">
+              <div className="space-y-3 border-b border-border/60 px-4 py-3.5">
+                <p className="text-xs font-semibold text-text-secondary">
+                  {alert.user?.name || "This user"}&rsquo;s {badgeConfig.label} events
+                </p>
+
+                {cardUserEventsQuery.isLoading ? (
+                  <p className="py-4 text-center text-xs text-text-tertiary">Loading events...</p>
+                ) : cardUserEvents.length === 0 ? (
+                  <p className="py-4 text-center text-xs text-text-tertiary">
+                    No events found for this scope
+                  </p>
+                ) : (
+                  <div className="overflow-hidden rounded-lg border border-border">
+                    <Table className="table-fixed">
+                      <TableHeader>
+                        <TableRow className="border-b border-border bg-transparent">
+                          <TableHead className="w-1/2">Date &amp; Time</TableHead>
+                          <TableHead className="w-1/2">Alert</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {cardUserEvents.map((event) => {
+                          const eventBadge = getAlertBadgeConfig(event.status);
+                          const EventIcon = eventBadge.icon;
+
+                          return (
+                            <TableRow key={event._id}>
+                              <TableCell className="text-xs text-text-secondary">
+                                {formatAlertDateTime(event)}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={eventBadge.variant}
+                                  className="h-7 w-44 px-3 text-xs font-semibold"
+                                >
+                                  <EventIcon className="size-3.5 shrink-0" />
+                                  <span className="truncate">{eventBadge.label}</span>
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+
+                {cardUserEventsPagination && cardUserEventsPagination.totalPages > 1 ? (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <PageSizeSelect
+                      value={expandedUserPageSize}
+                      onChange={(value) => {
+                        setExpandedUserPageSize(value);
+                        setExpandedUserPage(1);
+                      }}
+                    />
+                    <PaginationControls
+                      page={expandedUserPage}
+                      totalPages={cardUserEventsPagination.totalPages}
+                      onPageChange={setExpandedUserPage}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            </TableCell>
+          </TableRow>
+        ) : null}
+      </Fragment>
     );
   };
 
@@ -795,13 +983,17 @@ export default function AlertManagementPage() {
                         <div className="rounded-lg border border-border/60 bg-card px-3 py-2">
                           <p className="text-[11px] text-text-tertiary">Check In</p>
                           <p className="text-xs font-medium text-text-primary">
-                            {item.checkInAt ? formatDateTimeLabel(item.checkInAt) : "-"}
+                            {item.checkInAt
+                              ? formatDateTimeLabelInZone(item.checkInAt, item.timezone)
+                              : "-"}
                           </p>
                         </div>
                         <div className="rounded-lg border border-border/60 bg-card px-3 py-2">
                           <p className="text-[11px] text-text-tertiary">Check Out</p>
                           <p className="text-xs font-medium text-text-primary">
-                            {item.checkOutAt ? formatDateTimeLabel(item.checkOutAt) : "-"}
+                            {item.checkOutAt
+                              ? formatDateTimeLabelInZone(item.checkOutAt, item.timezone)
+                              : "-"}
                           </p>
                         </div>
                         <div className="rounded-lg border border-border/60 bg-card px-3 py-2">
@@ -843,7 +1035,13 @@ export default function AlertManagementPage() {
 
       {/* Card Alert Type Dialog */}
       <Dialog open={Boolean(cardAlertType)} onOpenChange={(value) => !value && setCardAlertType(null)}>
-        <DialogContent className="max-w-[900px] rounded-2xl border-border bg-card">
+        {/* The column widths below must stay narrower than this dialog's inner
+            width (max-w minus DialogContent's p-6 on both sides). The table is
+            `table-fixed` inside an `overflow-x-auto` wrapper, so any excess
+            silently scrolls the last column out of sight rather than wrapping —
+            which is what hid the Events count/chevron (and, before it, the
+            Action column) entirely. */}
+        <DialogContent className="max-w-[960px] rounded-2xl border-border bg-card">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold text-text-primary">{cardAlertLabel} Alerts</DialogTitle>
           </DialogHeader>
@@ -852,11 +1050,11 @@ export default function AlertManagementPage() {
             <Table className="table-fixed">
               <TableHeader>
                 <TableRow className="border-b border-border bg-transparent">
-                  <TableHead className="w-[220px]">User Name</TableHead>
-                  <TableHead className="w-[140px]">User ID</TableHead>
-                  <TableHead className="w-[200px]">Date &amp; Time</TableHead>
-                  <TableHead className="w-[220px]">Alert</TableHead>
-                  <TableHead className="w-[140px] text-right">Action</TableHead>
+                  <TableHead className="w-[200px]">User Name</TableHead>
+                  <TableHead className="w-[110px]">User ID</TableHead>
+                  <TableHead className="w-[190px]">Date &amp; Time</TableHead>
+                  <TableHead className="w-[210px]">Alert</TableHead>
+                  <TableHead className="w-[110px] text-right">Events</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -873,7 +1071,7 @@ export default function AlertManagementPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  cardAlerts.map(renderAlertRow)
+                  cardAlerts.map(renderCardUserRow)
                 )}
               </TableBody>
             </Table>
@@ -893,13 +1091,17 @@ export default function AlertManagementPage() {
                 onChange={(value) => {
                   setCardPageSize(value);
                   setCardPage(1);
+                  setExpandedCardUserId(null);
                 }}
               />
             </div>
             <PaginationControls
               page={cardPage}
               totalPages={cardPagination?.totalPages ?? 1}
-              onPageChange={setCardPage}
+              onPageChange={(value) => {
+                setCardPage(value);
+                setExpandedCardUserId(null);
+              }}
             />
           </div>
 
